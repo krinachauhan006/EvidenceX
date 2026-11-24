@@ -1,0 +1,6 @@
+date,vendor,amount,note
+2026-10-12,Northwind Test Supplies,1200.50,synthetic
+2026-10-13,Contoso Test Freight,87,synthetic
+2026-10-14,"Fabrikam Test, Services",310.25,"line one
+line two"
+2026-10-15,Adatum Test Corp,,missing amount

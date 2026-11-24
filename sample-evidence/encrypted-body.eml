@@ -1,0 +1,9 @@
+From: Alex Tester <alex.tester@example.org>
+To: sam.sample@example.com
+Subject: Synthetic encrypted message
+Message-ID: <synthetic-0005@example.org>
+MIME-Version: 1.0
+Content-Type: application/pkcs7-mime; smime-type=enveloped-data; name="smime.p7m"
+Content-Transfer-Encoding: base64
+
+U1lOVEhFVElDIFBMQUNFSE9MREVSIChub3QgYSByZWFsIGVuY3J5cHRlZCBib2R5KQ==

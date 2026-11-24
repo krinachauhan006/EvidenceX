@@ -1,0 +1,22 @@
+﻿# Local development infrastructure for EvidenceX.
+# Postgres only for now; more services added when later stages need them.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: evidencex-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-evidencex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-evidencex}
+      POSTGRES_DB: ${POSTGRES_DB:-evidencex}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - evidencex_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evidencex -d evidencex"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  evidencex_pgdata:

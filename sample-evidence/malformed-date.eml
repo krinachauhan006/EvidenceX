@@ -1,0 +1,9 @@
+From: Alex Tester <alex.tester@example.org>
+To: sam.sample@example.com
+Subject: Synthetic message with a malformed date
+Date: Someday around noon
+Message-ID: <synthetic-0002@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+SYNTHETIC TEST FIXTURE. Invented data, not real evidence.

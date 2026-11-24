@@ -1,0 +1,47 @@
+From: Alex Tester <alex.tester@example.org>
+To: Sam Sample <sam.sample@example.com>
+Cc: records@example.org
+Subject: Synthetic test message about the Q3 register
+Date: Mon, 12 Oct 2026 09:30:00 +0100
+Message-ID: <synthetic-0001@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============5221338407011462456=="
+
+--===============5221338407011462456==
+Content-Type: multipart/alternative;
+ boundary="===============8305406194159214766=="
+
+--===============8305406194159214766==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+SYNTHETIC TEST FIXTURE. Invented data, not real evidence.
+Please see the attached register.
+
+--===============8305406194159214766==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<html><body><p>SYNTHETIC TEST FIXTURE. Invented data, not real evidence.</p><=
+p>Please see the attached register.</p></body></html>
+
+--===============8305406194159214766==--
+
+--===============5221338407011462456==
+Content-Type: text/csv
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="register.csv"
+MIME-Version: 1.0
+
+aWQsaXRlbQ0KMSx3aWRnZXQNCg==
+
+--===============5221338407011462456==
+Content-Type: application/octet-stream
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="scan.bin"
+MIME-Version: 1.0
+
+U1lOVEhFVElDIGJpbmFyeSBwbGFjZWhvbGRlcg==
+
+--===============5221338407011462456==--

@@ -1,0 +1,25 @@
+From: Alex Tester <alex.tester@example.org>
+To: sam.sample@example.com
+Subject: Synthetic message with hidden HTML
+Message-ID: <synthetic-0004@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="===============5132009227215402307=="
+
+--===============5132009227215402307==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Visible plain text. SYNTHETIC TEST FIXTURE. Invented data, not real evidence.
+
+--===============5132009227215402307==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<html><head><style>p{color:red}</style><title>ignored title</title></head><bo=
+dy><script>alert('should never appear')</script><p>Visible paragraph.</p><div=
+ style=3D"display:none">Hidden synthetic text.</div><p>See <a href=3D"https:/=
+/example.org/report">the report</a>.</p></body></html>
+
+--===============5132009227215402307==--
