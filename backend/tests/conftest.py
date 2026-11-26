@@ -31,6 +31,7 @@ from app.modules.analysis import models as _analysis_models  # noqa: F401
 from app.modules.analysis.router import get_analysis_runner, get_analysis_service
 from app.modules.analysis.runner import AnalysisRunner, RuleBasedClaimExtractor
 from app.modules.analysis.service import AnalysisService
+from app.modules.auth import models as _auth_models  # noqa: F401
 from app.modules.cases import models as _cases_models  # noqa: F401
 from app.modules.evidence import models as _evidence_models  # noqa: F401
 from app.modules.evidence.router import get_service as get_evidence_service
@@ -141,7 +142,7 @@ def client(
         yield db_session
 
     def _override_evidence_service() -> EvidenceService:
-        return EvidenceService(db_session, storage=storage)
+        return EvidenceService(db_session, settings=settings, storage=storage)
 
     def _override_processing_service() -> ProcessingService:
         return ProcessingService(db_session, registry, settings)
@@ -153,5 +154,50 @@ def client(
     app.dependency_overrides[get_analysis_service] = lambda: AnalysisService(db_session, settings)
     app.dependency_overrides[get_analysis_runner] = lambda: analysis_runner
     with TestClient(app) as c:
+        # Every route requires a signed-in user. The default client is the owner of
+        # each case it creates; auth tests build extra clients via ``make_user``.
+        res = c.post("/api/auth/register", json=TEST_USER)
+        assert res.status_code == 201, res.text
         yield c
     app.dependency_overrides.clear()
+
+
+TEST_USER = {
+    "email": "investigator@example.org",
+    "display_name": "Test Investigator",
+    "password": "correct horse battery",
+}
+TEST_ACTOR = "Test Investigator <investigator@example.org>"
+
+
+@pytest.fixture
+def make_user(client):
+    """Register another account and return a TestClient signed in as it (same app)."""
+    clients: list[TestClient] = []
+
+    def _make(email: str, name: str = "Second User") -> TestClient:
+        other = TestClient(client.app)
+        r = other.post(
+            "/api/auth/register",
+            json={"email": email, "display_name": name, "password": "another long password"},
+        )
+        assert r.status_code == 201, r.text
+        clients.append(other)
+        return other
+
+    yield _make
+    for c in clients:
+        c.close()
+
+
+@pytest.fixture
+def anon(client):
+    """A client for the SAME app and test database with NO session cookie.
+
+    The default ``client`` signs in automatically so ordinary tests stay short; this
+    fixture keeps unauthenticated behaviour explicitly testable.
+    """
+    c = TestClient(client.app)
+    assert not c.cookies, "an anonymous client must not carry a session"
+    yield c
+    c.close()

@@ -2,9 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EvidenceX",
+  title: {
+    default: "EvidenceX · Multimodal evidence investigation",
+    template: "%s",
+  },
   description:
-    "Multimodal Evidence Intelligence and Investigation Platform",
+    "EvidenceX connects documents, images, audio, video, email and spreadsheets into one " +
+    "source-anchored investigation workspace with human review.",
 };
 
 export default function RootLayout({

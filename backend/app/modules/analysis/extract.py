@@ -29,7 +29,14 @@ MAX_CLAIMS_PER_EXTRACTION = 500
 MAX_QUOTE_CHARS = 600
 
 TEXT_SEGMENT_TYPES = frozenset(
-    {"pdf_text_block", "ocr_line", "transcript_segment", "email_body_text", "email_body_html"}
+    {
+        "pdf_text_block",
+        "ocr_line",
+        "transcript_segment",
+        "email_body_text",
+        "email_body_html",
+        "video_ocr_line",  # text read from a sampled video frame
+    }
 )
 MODALITY = {
     "document": "pdf",
@@ -37,6 +44,7 @@ MODALITY = {
     "audio": "audio",
     "tabular": "tabular",
     "email": "email",
+    "video": "video",
 }
 
 # --- patterns ------------------------------------------------------------------------
@@ -461,6 +469,8 @@ def claims_from_text_segment(segment: SegmentView) -> list[ClaimDraft]:
             uncertainty.append("from machine transcription; not verified against the recording")
         elif segment.segment_type == "ocr_line":
             uncertainty.append("from OCR; characters may be misread")
+        elif segment.segment_type == "video_ocr_line":
+            uncertainty.append("from OCR of a sampled video frame; characters may be misread")
         subject = next(
             (x.text for x in mentions if x.entity_type in ("shipment", "identifier", "vehicle")),
             None,
@@ -736,3 +746,100 @@ def resolution_candidate(
     ):
         return f"the digits differ by one character ({digits_a} vs {digits_b}); possible misreading"
     return None
+
+
+# Candidate tiers, strongest first. The score is a heuristic ordering aid for
+# reviewers, not a probability that the two records are the same thing.
+CANDIDATE_TIERS = ("exact", "strong", "weak", "conflicting")
+_TIER_SCORE = {"exact": 0.9, "strong": 0.7, "weak": 0.4, "conflicting": 0.3}
+
+
+def _name_key(name: str) -> str:
+    return " ".join(re.sub(r"[^\w\s]", " ", name.lower()).split())
+
+
+def assess_candidate(
+    a: tuple[str, str, str],
+    b: tuple[str, str, str],
+    *,
+    misreading_possible: bool = True,
+) -> dict[str, Any] | None:
+    """Tier, heuristic score and the factors for and against two records (type, key,
+    display name) being the same thing, or None when nothing links them.
+
+    - exact: identical characters recorded under different identifier types;
+    - strong: the same digits with different or missing prefixes;
+    - weak: one differing digit where OCR/speech could have misread it;
+    - conflicting: signals point both ways (the same contact name with different
+      addresses; the same long number in two different record series).
+    Never used to merge automatically.
+    """
+    (type_a, key_a, name_a), (type_b, key_b, name_b) = a, b
+    factors: list[dict[str, Any]] = []
+    if type_a == type_b == "contact" and key_a != key_b:
+        na, nb = _name_key(name_a), _name_key(name_b)
+        if na and na == nb and "@" not in name_a + name_b and len(na) >= 4:
+            factors = [
+                {"factor": "same display name", "effect": "+", "detail": name_a},
+                {
+                    "factor": "different addresses",
+                    "effect": "-",
+                    "detail": f"{key_a} vs {key_b}; different people can share a name",
+                },
+            ]
+            return {
+                "tier": "conflicting",
+                "score": _TIER_SCORE["conflicting"],
+                "reason": "the same name is used with different email addresses",
+                "factors": factors,
+            }
+        return None
+    reason = resolution_candidate(
+        (type_a, key_a), (type_b, key_b), misreading_possible=misreading_possible
+    )
+    if reason is None:
+        return None
+    if key_a == key_b:
+        tier = "exact"
+        factors = [
+            {"factor": "identical characters", "effect": "+", "detail": key_a},
+            {"factor": "different entity types", "effect": "-", "detail": f"{type_a} / {type_b}"},
+        ]
+    elif reason.startswith("the same digits"):
+        digits = digits_of(key_a)
+        pa, pb = key_a[: -len(digits)], key_b[: -len(digits)]
+        factors = [{"factor": "same digits", "effect": "+", "detail": digits}]
+        if pa and pb and pa != pb:
+            tier = "conflicting"
+            factors.append(
+                {
+                    "factor": "different record series",
+                    "effect": "-",
+                    "detail": f"prefixes {pa} and {pb} usually name different series",
+                }
+            )
+        else:
+            tier = "strong"
+            factors.append(
+                {
+                    "factor": "prefix missing on one side",
+                    "effect": "+",
+                    "detail": f"{key_a} / {key_b}",
+                }
+            )
+    else:
+        tier = "weak"
+        factors = [
+            {"factor": "one digit differs", "effect": "+", "detail": f"{key_a} vs {key_b}"},
+            {
+                "factor": "machine-read source",
+                "effect": "+",
+                "detail": "OCR or speech recognition can misread single characters",
+            },
+            {
+                "factor": "different numbers",
+                "effect": "-",
+                "detail": "sequential or similar ids often belong to different records",
+            },
+        ]
+    return {"tier": tier, "score": _TIER_SCORE[tier], "reason": reason, "factors": factors}

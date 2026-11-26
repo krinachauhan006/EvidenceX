@@ -30,10 +30,14 @@ class FakeOcrEngine:
     name = "fake-ocr"
 
     def __init__(self, words: list[tuple] | None = None) -> None:
-        self.words = words if words is not None else [
-            ("SYNTHETIC", 96.0, 10, 10, 100, 20, 1, 1, 1),
-            ("PAGE", 92.0, 120, 10, 50, 20, 1, 1, 1),
-        ]
+        self.words = (
+            words
+            if words is not None
+            else [
+                ("SYNTHETIC", 96.0, 10, 10, 100, 20, 1, 1, 1),
+                ("PAGE", 92.0, 120, 10, 50, 20, 1, 1, 1),
+            ]
+        )
         self.calls = 0
 
     def version(self, options: Mapping[str, Any]) -> str:
@@ -82,3 +86,57 @@ class FakeTranscriber:
             engine="fake-whisper",
             engine_version="fake 1.0",
         )
+
+
+# --- Module-level (picklable) extractors for the subprocess executor tests --------
+
+
+class EchoExtractor:
+    """Returns the input length; runs fine in a child process."""
+
+    name = "echo"
+    version = "1"
+
+    def extract(self, inp: Any) -> Any:
+        import os
+
+        from app.modules.processing.extractors.base import ExtractionResult
+
+        return ExtractionResult(
+            self.name, self.version, "empty", [], {"bytes": len(inp.data), "pid": os.getpid()}, []
+        )
+
+
+class SleepyExtractor:
+    """Hangs longer than any test timeout, like a parser stuck on a hostile file."""
+
+    name = "sleepy"
+    version = "1"
+
+    def extract(self, inp: Any) -> Any:
+        import time
+
+        time.sleep(60)
+        raise AssertionError("unreachable")
+
+
+class CorruptExtractor:
+    """Raises an expected extraction error inside the child."""
+
+    name = "corrupt"
+    version = "1"
+
+    def extract(self, inp: Any) -> Any:
+        from app.modules.processing.errors import CorruptFileError
+
+        raise CorruptFileError("The synthetic file could not be read.")
+
+
+class CrashingExtractor:
+    """Raises an unexpected error inside the child."""
+
+    name = "crash"
+    version = "1"
+
+    def extract(self, inp: Any) -> Any:
+        raise ValueError("synthetic parser bug with a secret path C:/x")

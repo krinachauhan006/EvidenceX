@@ -1,4 +1,4 @@
-import { API_BASE, ApiError, apiFetch, apiUpload } from "@/lib/api/client";
+import { API_BASE, apiBlob, apiFetch, apiUpload } from "@/lib/api/client";
 import type { Evidence, EvidenceList } from "@/lib/types/evidence";
 
 export function listEvidence(caseId: string): Promise<EvidenceList> {
@@ -42,12 +42,21 @@ export async function fetchEvidenceBlob(
   evidenceId: string,
   signal?: AbortSignal,
 ): Promise<Blob> {
-  const res = await fetch(evidenceDownloadUrl(caseId, evidenceId), {
-    cache: "no-store",
+  return apiBlob(`/api/cases/${caseId}/evidence/${evidenceId}/download`, signal);
+}
+
+/** One video frame at ``t`` seconds as a JPEG Blob (decoded on demand by the API). */
+export function fetchVideoFrame(
+  caseId: string,
+  evidenceId: string,
+  t: number,
+  width = 640,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return apiBlob(
+    `/api/cases/${caseId}/evidence/${evidenceId}/frame?t=${t.toFixed(3)}&width=${width}`,
     signal,
-  });
-  if (!res.ok) throw new ApiError(res.status, `Request failed (${res.status})`);
-  return res.blob();
+  );
 }
 
 // Supported upload formats, mirrored from the backend validation registry
@@ -66,6 +75,9 @@ export const ACCEPTED_EXTENSIONS = [
   ".csv",
   ".xlsx",
   ".eml",
+  ".mp4",
+  ".mov",
+  ".webm",
 ] as const;
 
 /** "PDF, PNG, JPG, ..." for the upload guidance line. */

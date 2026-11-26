@@ -3,9 +3,11 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { GitMerge, Loader2, Search } from "lucide-react";
+import { Clock, GitMerge, Loader2, Search } from "lucide-react";
 import { entityCandidates, getEntity, listEntities, reviewEntity } from "@/lib/api/analysis";
-import type { Candidate, EntityAction, EntityDetail } from "@/lib/types/analysis";
+import type { Candidate, CandidateTier, EntityAction, EntityDetail } from "@/lib/types/analysis";
+import { hasRole } from "@/lib/types/case";
+import { useToast } from "@/components/ui/toast";
 import { useCaseContext } from "@/components/cases/case-shell";
 import { sourceLabel } from "@/components/analysis/claim-card";
 import { HistoryList } from "@/components/analysis/contradiction-card";
@@ -157,7 +159,13 @@ function CandidatesPanel({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reviewer] = useReviewer();
+  const [deferring, setDeferring] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [tier, setTier] = useState<CandidateTier | "all">("all");
+  const { role } = useCaseContext();
+  const notify = useToast();
+  const canReview = hasRole(role, "reviewer");
+  const shown = tier === "all" ? items : items.filter((c) => c.tier === tier);
 
   async function act(c: Candidate, action: EntityAction) {
     setBusy(`${c.entity_a.id}-${action}`);
@@ -166,11 +174,21 @@ function CandidatesPanel({
       await reviewEntity(caseId, c.entity_a.id, {
         action,
         target_entity_id: c.entity_b.id,
-        reviewer: reviewer || undefined,
+        note: action === "defer" ? note.trim() : undefined,
       });
+      const msg: Record<string, string> = {
+        merge: "Merged; the original mentions are kept unchanged",
+        mark_distinct: "Marked as different entities",
+        defer: "Decision deferred with your note",
+      };
+      notify("success", msg[action] ?? "Saved");
+      setDeferring(null);
+      setNote("");
       onChanged();
     } catch (err) {
-      setError(errorText(err, "The decision could not be saved."));
+      const text = errorText(err, "The decision could not be saved.");
+      setError(text);
+      notify("error", "Not saved", text);
     } finally {
       setBusy(null);
     }
@@ -180,40 +198,98 @@ function CandidatesPanel({
     <Card className="p-3">
       <p className="text-sm font-medium text-slate-200">Possible duplicates ({items.length})</p>
       <p className="text-xs text-slate-500">
-        Suggested from near-identical identifiers (for example one digit apart). Decide each
-        pair; nothing is merged automatically.
+        Pairs that may be the same thing, ranked by tier. The score is a heuristic ordering aid, not a
+        probability. Decide each pair; nothing is merged automatically.
       </p>
-      {loading && items.length === 0 && <LoadingState />}
-      {items.length === 0 && !loading && <p className="mt-2 text-xs text-slate-500">None.</p>}
-      <ul className="mt-2 space-y-2">
-        {items.map((c) => (
-          <li key={`${c.entity_a.id}-${c.entity_b.id}`} className="rounded-md border border-inconsistency/25 bg-navy-950/60 p-2 text-sm">
-            <div className="flex flex-wrap items-center gap-1 text-slate-200">
-              <button type="button" className="hover:underline" onClick={() => onSelect(c.entity_a.id)}>
-                {c.entity_a.display_name}
-              </button>
-              <span className="text-slate-500">and</span>
-              <button type="button" className="hover:underline" onClick={() => onSelect(c.entity_b.id)}>
-                {c.entity_b.display_name}
-              </button>
-            </div>
-            <p className="text-xs text-inconsistency/90">{c.reason}</p>
-            <div className="mt-1.5 flex gap-1.5">
-              <button type="button" className={BUTTON} disabled={busy !== null} onClick={() => void act(c, "merge")}>
-                {busy === `${c.entity_a.id}-merge` ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <GitMerge className="h-3 w-3" aria-hidden />}
-                Same entity: merge
-              </button>
-              <button type="button" className={BUTTON} disabled={busy !== null} onClick={() => void act(c, "mark_distinct")}>
-                Different entities
-              </button>
-            </div>
-          </li>
+      <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label="Filter by tier">
+        {(["all", "exact", "strong", "weak", "conflicting"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            aria-pressed={tier === t}
+            onClick={() => setTier(t)}
+            className={`rounded-full border px-2 py-0.5 text-[11px] ${tier === t ? "border-sky-400/60 bg-sky-500/15 text-sky-200" : "border-navy-700 text-slate-400 hover:text-slate-200"}`}
+          >
+            {t === "all" ? "All" : TIER[t].label} {t === "all" ? items.length : items.filter((c) => c.tier === t).length}
+          </button>
         ))}
+      </div>
+      {loading && items.length === 0 && <LoadingState />}
+      {shown.length === 0 && !loading && <p className="mt-2 text-xs text-slate-500">None.</p>}
+      <ul className="mt-2 space-y-2">
+        {shown.map((c) => {
+          const key = `${c.entity_a.id}-${c.entity_b.id}`;
+          const t = TIER[c.tier] ?? TIER.weak;
+          return (
+            <li key={key} className={`rounded-lg border bg-navy-950/60 p-2.5 text-sm ${t.border}`}>
+              <div className="flex flex-wrap items-center gap-1.5 text-slate-200">
+                <Badge tone={t.tone} title={t.help}>
+                  {t.label} · {Math.round(c.score * 100)}
+                </Badge>
+                {c.deferred && <Badge title={c.deferred_note ?? undefined}>deferred</Badge>}
+                <button type="button" className="hover:underline" onClick={() => onSelect(c.entity_a.id)}>
+                  {c.entity_a.display_name}
+                </button>
+                <span className="text-slate-500">and</span>
+                <button type="button" className="hover:underline" onClick={() => onSelect(c.entity_b.id)}>
+                  {c.entity_b.display_name}
+                </button>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-400">{c.reason}</p>
+              {c.factors.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5 text-[11px]">
+                  {c.factors.map((f) => (
+                    <li key={f.factor} className={f.effect === "+" ? "text-processed/90" : "text-inconsistency/90"}>
+                      {f.effect === "+" ? "▲ for" : "▼ against"}: <span className="text-slate-300">{f.factor}</span> · {f.detail}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {c.deferred && c.deferred_note && <p className="mt-1 text-[11px] text-slate-500">Deferred: {c.deferred_note}</p>}
+              {canReview && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <button type="button" className={BUTTON} disabled={busy !== null} onClick={() => void act(c, "merge")}>
+                    {busy === `${c.entity_a.id}-merge` ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <GitMerge className="h-3 w-3" aria-hidden />}
+                    Same entity: merge
+                  </button>
+                  <button type="button" className={BUTTON} disabled={busy !== null} onClick={() => void act(c, "mark_distinct")}>
+                    Different entities
+                  </button>
+                  <button type="button" className={BUTTON} disabled={busy !== null} onClick={() => setDeferring(deferring === key ? null : key)} aria-expanded={deferring === key}>
+                    <Clock className="h-3 w-3" aria-hidden /> Decide later
+                  </button>
+                </div>
+              )}
+              {deferring === key && (
+                <div className="mt-2 flex gap-1.5">
+                  <input
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="What would settle it?"
+                    maxLength={4000}
+                    className={`${INPUT} flex-1 py-1 text-xs`}
+                    aria-label="Reason for deferring"
+                  />
+                  <button type="button" className={BUTTON} disabled={busy !== null || !note.trim()} onClick={() => void act(c, "defer")}>
+                    Save
+                  </button>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
       {error && <p role="alert" className="mt-2 text-xs text-failed">{error}</p>}
     </Card>
   );
 }
+
+const TIER: Record<CandidateTier, { label: string; tone: "green" | "blue" | "neutral" | "amber"; border: string; help: string }> = {
+  exact: { label: "Exact", tone: "green", border: "border-processed/30", help: "Identical characters recorded under different identifier types." },
+  strong: { label: "Strong", tone: "blue", border: "border-sky-500/30", help: "The same digits, with a prefix missing on one side." },
+  weak: { label: "Weak", tone: "neutral", border: "border-navy-700", help: "One digit differs in machine-read text; often two different records." },
+  conflicting: { label: "Conflicting", tone: "amber", border: "border-inconsistency/30", help: "Signals point both ways, e.g. the same name with different e-mail addresses." },
+};
 
 function EntityPanel({
   caseId,

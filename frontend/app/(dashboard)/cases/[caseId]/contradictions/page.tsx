@@ -41,7 +41,7 @@ export default function ContradictionsPage() {
     <div>
       <SectionHeader
         title="Potential inconsistencies"
-        description="Pairs of claims from different evidence items that mention the same identifier and appear to disagree. They are leads for human review: a difference can be benign, and EvidenceX does not decide which source is correct."
+        description="Pairs of claims that appear to disagree: either they mention the same identifier, or a reviewer confirmed they describe one event. They are leads for human review: a difference can be benign, and EvidenceX does not decide which source is correct."
         actions={
           <>
             <select value={status} onChange={(e) => setStatus(e.target.value)} className={SELECT} aria-label="Review status">

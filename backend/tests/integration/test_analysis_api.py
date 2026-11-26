@@ -16,6 +16,7 @@ from app.modules.processing.extractors.audio import (
     Transcription,
     TranscriptSegment,
 )
+from tests.conftest import TEST_ACTOR
 from tests.fixtures.processing_samples import make_pdf_text, make_wav
 
 CSV = b"shipment_id,arrival_time,quantity\nNS-88421,14:30,120\nNS-77310,09:00,40\n"
@@ -230,7 +231,10 @@ def test_claim_review_transitions_and_history(client, scenario):
     assert client.post(url, json={"action": "edit"}).status_code == 400
     actions = [h["action"] for h in body["history"]]
     assert actions == ["edit", "verify", "needs_verification"]
-    assert body["history"][-1]["reviewer"] == "analyst-1"
+    # Phase 2: the signed-in account is the reviewer of record; a self-declared name
+    # is kept only as context in the payload.
+    assert body["history"][-1]["reviewer"] == TEST_ACTOR
+    assert body["history"][-1]["payload"]["declared_reviewer"] == "analyst-1"
     assert body["history"][1]["from_status"] == "needs_verification"
 
 
@@ -272,7 +276,7 @@ def test_segment_correction_is_stored_separately(client, scenario):
     assert after["text"] == seg["text"]  # machine text unchanged
     assert after["review_status"] == "reviewed"
     assert after["reviewed_text"] == "Shipment NS-88421 arrived at 10:13."
-    assert after["reviewed_by"] == "transcriber"
+    assert after["reviewed_by"] == TEST_ACTOR  # the signed-in account, not a typed name
     other = make_case(client, "Other")
     bad = f"/api/cases/{other}/evidence/{wav_id}/segments/{seg['id']}/reviews"
     assert client.post(bad, json={"corrected_text": "x"}).status_code == 404
@@ -357,7 +361,14 @@ def test_graph_nodes_and_edges_are_consistent(client, scenario):
     graph = get(client, f"/api/cases/{case_id}/graph")
     ids = {n["id"] for n in graph["nodes"]}
     kinds = {n["kind"] for n in graph["nodes"]}
-    assert kinds == {"evidence", "claim", "entity", "contradiction"}
+    # Phase 2 adds proposed event nodes when the rules find shared anchors.
+    assert {"evidence", "claim", "entity", "contradiction"} <= kinds <= {
+        "evidence",
+        "claim",
+        "entity",
+        "contradiction",
+        "event",
+    }
     assert graph["edges"] and all(e["source"] in ids and e["target"] in ids for e in graph["edges"])
     compact = get(client, f"/api/cases/{case_id}/graph", include_claims=False)
     assert "claim" not in {n["kind"] for n in compact["nodes"]}

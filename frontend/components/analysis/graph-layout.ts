@@ -34,7 +34,13 @@ export function hashString(value: string): number {
 }
 
 // Start each kind on its own ring so the picture settles quickly and readably.
-const RING: Record<string, number> = { evidence: 0.15, entity: 0.45, claim: 0.75, contradiction: 0.6 };
+const RING: Record<string, number> = {
+  evidence: 0.15,
+  event: 0.3,
+  entity: 0.45,
+  contradiction: 0.6,
+  claim: 0.75,
+};
 
 export function layoutGraph(
   nodes: LayoutNode[],

@@ -14,10 +14,12 @@ from collections.abc import Iterable, Sequence
 from datetime import timedelta
 from typing import Any
 
+from app.core.actor import current_actor
 from app.core.config import Settings, get_settings
 from app.core.db_types import utcnow
 from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
-from app.modules.analysis.extract import resolution_candidate
+from app.modules.analysis.audit import record_action
+from app.modules.analysis.extract import CANDIDATE_TIERS, assess_candidate
 from app.modules.analysis.models import (
     AlternativeExplanation,
     AnalysisRun,
@@ -105,8 +107,16 @@ CONTRADICTION_TRANSITIONS: dict[str, set[str]] = {
 }
 OPEN_CLAIM_STATES = ("unreviewed", "needs_verification")
 # Claim modalities whose text comes from OCR or speech recognition (can be misread).
-MACHINE_READ_MODALITIES = ("audio", "image")
+MACHINE_READ_MODALITIES = ("audio", "image", "video")
 OPEN_CONTRADICTION_STATES = ("unreviewed", "unresolved")
+
+
+def _who(declared: str | None) -> str:
+    """The logged-in account's label; a self-declared name only without login."""
+    actor = current_actor()
+    if actor is not None:
+        return actor.label[:128]
+    return ((declared or "").strip() or DEFAULT_REVIEWER)[:128]
 
 
 def run_out(run: AnalysisRun) -> AnalysisRunOut:
@@ -180,19 +190,19 @@ class AnalysisService:
         reviewer: str | None = None,
         payload: dict[str, Any] | None = None,
     ) -> ReviewAction:
-        row = ReviewAction(
-            case_id=case_id,
-            target_type=target_type,
-            target_id=target_id,
-            action=action,
+        # Hash-chained, and attributed to the logged-in account when there is one.
+        return record_action(
+            self._db,
+            case_id,
+            target_type,
+            target_id,
+            action,
             from_status=from_status,
             to_status=to_status,
-            note=(note or None),
-            payload=payload or {},
-            reviewer=(reviewer or DEFAULT_REVIEWER).strip() or DEFAULT_REVIEWER,
+            note=note,
+            reviewer=reviewer,
+            payload=payload,
         )
-        self._repo.add(row)
-        return row
 
     def _history(self, case_id: uuid.UUID, target_type: str, target_id: uuid.UUID) -> list:
         return [
@@ -300,6 +310,17 @@ class AnalysisService:
         for alt in self._repo.alternatives_for([i.id for i in items]):
             alternatives.setdefault(alt.contradiction_id, []).append(_alternative_out(alt))
         names = {e.id: e.display_name for e in self._repo.list_entities(case_id)} if items else {}
+        event_ids = {i.via_event_id for i in items if i.via_event_id}
+        events = {}
+        if event_ids:
+            from app.modules.analysis.models import Event
+
+            events = {
+                e.id: e
+                for e in self._db.query(Event).filter(
+                    Event.case_id == case_id, Event.id.in_(event_ids)
+                )
+            }
         out = []
         for item in items:
             a, b = briefs.get(item.claim_a_id), briefs.get(item.claim_b_id)
@@ -320,6 +341,13 @@ class AnalysisService:
                     linked_evidence_ids=[uuid.UUID(str(x)) for x in item.linked_evidence_ids or []],
                     via_entity_id=item.via_entity_id,
                     via_entity_name=names.get(item.via_entity_id) if item.via_entity_id else None,
+                    via_event_id=item.via_event_id,
+                    via_event_title=(
+                        events[item.via_event_id].title if item.via_event_id in events else None
+                    ),
+                    via_event_status=(
+                        events[item.via_event_id].status if item.via_event_id in events else None
+                    ),
                     claim_a=a,
                     claim_b=b,
                     claims_current=a.source_current and b.source_current,
@@ -452,7 +480,7 @@ class AnalysisService:
             raise BadRequestError("a note is required")
         if req.note:
             claim.review_note = req.note
-        claim.reviewed_by = req.reviewer or DEFAULT_REVIEWER
+        claim.reviewed_by = _who(req.reviewer)
         claim.reviewed_at = utcnow()
         self._record(
             case_id,
@@ -510,6 +538,15 @@ class AnalysisService:
             other = action.payload.get("other_entity_id") if action.payload else None
             if other:
                 distinct.add(frozenset({action.target_id, uuid.UUID(str(other))}))
+        deferred: dict[frozenset[uuid.UUID], str | None] = {}
+        for action in self._repo.list_reviews(
+            case_id, target_type="entity", action="defer", limit=10_000
+        ):
+            other = action.payload.get("other_entity_id") if action.payload else None
+            if other:
+                deferred.setdefault(
+                    frozenset({action.target_id, uuid.UUID(str(other))}), action.note
+                )
         stats = self._repo.mention_stats(case_id)
         # Entities seen in OCR or speech output: only these can have been misread.
         machine_read = self._repo.entities_with_modalities(case_id, MACHINE_READ_MODALITIES)
@@ -520,19 +557,26 @@ class AnalysisService:
                     continue
                 if frozenset({a.id, b.id}) in distinct:
                     continue
-                reason = resolution_candidate(
-                    (a.entity_type, a.normalized_key),
-                    (b.entity_type, b.normalized_key),
+                found = assess_candidate(
+                    (a.entity_type, a.normalized_key, a.display_name),
+                    (b.entity_type, b.normalized_key, b.display_name),
                     misreading_possible=a.id in machine_read or b.id in machine_read,
                 )
-                if reason:
+                if found:
+                    pair = frozenset({a.id, b.id})
                     out.append(
                         CandidateOut(
                             entity_a=self._entity_out(a, stats),
                             entity_b=self._entity_out(b, stats),
-                            reason=reason,
+                            reason=found["reason"],
+                            tier=found["tier"],
+                            score=found["score"],
+                            factors=found["factors"],
+                            deferred=pair in deferred,
+                            deferred_note=deferred.get(pair),
                         )
                     )
+        out.sort(key=lambda c: (CANDIDATE_TIERS.index(c.tier), c.deferred))
         return out
 
     def candidates(self, case_id: uuid.UUID) -> CandidateList:
@@ -578,7 +622,7 @@ class AnalysisService:
         before = entity.resolution_status
         payload: dict[str, Any] = {}
         target: Entity | None = None
-        if req.action in ("merge", "mark_distinct"):
+        if req.action in ("merge", "mark_distinct", "defer"):
             if req.target_entity_id is None:
                 raise BadRequestError("target_entity_id is required")
             if req.target_entity_id == entity.id:
@@ -616,6 +660,11 @@ class AnalysisService:
             entity.merged_into_id = None
         elif req.action == "mark_distinct":
             assert target is not None
+            payload = {"other_entity_id": str(target.id)}
+        elif req.action == "defer":
+            assert target is not None
+            if not (req.note or "").strip():
+                raise BadRequestError("a note is required to defer a decision")
             payload = {"other_entity_id": str(target.id)}
         elif not (req.note or "").strip():
             raise BadRequestError("a note is required")
@@ -789,7 +838,7 @@ class AnalysisService:
             missing_information=req.missing_information,
             verification_recommendation=req.verification_recommendation,
             basis="human",
-            author=req.author or DEFAULT_REVIEWER,
+            author=_who(req.author),
         )
         self._repo.add(alt)
         self._repo.flush()
@@ -854,7 +903,7 @@ class AnalysisService:
             segment_id=segment.id,
             corrected_text=req.corrected_text,
             note=req.note,
-            reviewer=req.reviewer or DEFAULT_REVIEWER,
+            reviewer=_who(req.reviewer),
         )
         self._repo.add(row)
         self._repo.flush()
@@ -1039,6 +1088,43 @@ class AnalysisService:
                 add_edge(
                     f"claim:{r.source_claim_id}", f"claim:{r.target_claim_id}", r.relation_type
                 )
+        # Phase 2: proposed/confirmed events and the claims that are accounts of them.
+        # Rejected events are left out; "status" tells confirmed from suggested.
+        from app.modules.analysis.models import Event, EventClaim
+
+        events = list(
+            self._db.query(Event).filter(Event.case_id == case_id, Event.status != "rejected")
+        )
+        if events and not contradictions_only:
+            members = self._db.query(EventClaim).filter(
+                EventClaim.event_id.in_([e.id for e in events])
+            )
+            for e in events:
+                nodes[f"event:{e.id}"] = GraphNode(
+                    id=f"event:{e.id}",
+                    kind="event",
+                    label=e.title,
+                    sublabel=e.event_type,
+                    status=e.status,
+                    ref_id=e.id,
+                    data={
+                        "association_confidence": e.association_confidence,
+                        "link_basis": e.link_basis,
+                        "date": e.event_date,
+                    },
+                )
+            for m in members:
+                if include_claims:
+                    add_edge(
+                        f"claim:{m.claim_id}", f"event:{m.event_id}", "account_of", m.account_label
+                    )
+                elif m.claim_id in by_claim:
+                    add_edge(
+                        f"evidence:{by_claim[m.claim_id][1].id}",
+                        f"event:{m.event_id}",
+                        "account_of",
+                        m.account_label,
+                    )
         counts = Counter(n.kind for n in nodes.values())
         return GraphOut(
             nodes=list(nodes.values()),

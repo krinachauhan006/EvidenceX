@@ -66,6 +66,37 @@ def _batches(segments: list[SegmentView]) -> list[list[SegmentView]]:
     return out
 
 
+class HybridClaimExtractor:
+    """AI extraction with a per-evidence-item rule-based fallback.
+
+    Each draft keeps the method that actually produced it, so fallback claims are
+    labelled ``rule_based_v1`` and AI claims ``gemini_claims_v1``. Counters record how
+    often the fallback was used and why (error types only, never evidence text).
+    """
+
+    method = "hybrid"
+
+    def __init__(self, ai: GeminiClaimExtractor, rules: object) -> None:
+        self._ai = ai
+        self._rules = rules
+        self.ai_items = 0
+        self.fallback_items = 0
+        self.fallback_reasons: dict[str, int] = {}
+
+    def extract(self, segments: list[SegmentView]) -> list[ClaimDraft]:
+        from app.ai.gemini_client import AIError
+
+        try:
+            drafts = self._ai.extract(segments)
+            self.ai_items += 1
+            return drafts
+        except AIError as exc:
+            self.fallback_items += 1
+            name = type(exc).__name__
+            self.fallback_reasons[name] = self.fallback_reasons.get(name, 0) + 1
+            return self._rules.extract(segments)  # type: ignore[attr-defined]
+
+
 class GeminiClaimExtractor:
     method = METHOD
 

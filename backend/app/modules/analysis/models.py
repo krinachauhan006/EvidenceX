@@ -24,6 +24,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -109,6 +110,10 @@ class Claim(TimestampMixin, Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     dedupe_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Set when a later run with a different method replaced this (unreviewed) claim.
+    # The claim is kept for audit and hidden from default lists. No FK constraint:
+    # added in place by migration 0007 (SQLite cannot add an FK without a rebuild).
+    superseded_by_run_id: Mapped[uuid.UUID | None] = mapped_column(GUID(), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("case_id", "dedupe_key", name="uq_claims_case_dedupe"),
@@ -217,10 +222,14 @@ class PotentialContradiction(TimestampMixin, Base):
     reviewer_decision: Mapped[str | None] = mapped_column(Text)
     resolution_note: Mapped[str | None] = mapped_column(Text)
     linked_evidence_ids: Mapped[list] = mapped_column(JsonType, nullable=False, default=list)
+    # Set when the comparison was made inside a reviewer-confirmed event (Phase 2).
+    # No FK constraint (added in place by migration 0007); the service validates it.
+    via_event_id: Mapped[uuid.UUID | None] = mapped_column(GUID(), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("claim_a_id", "claim_b_id", "category", name="uq_contradiction_pair"),
         Index("ix_contradictions_case_status", "case_id", "review_status"),
+        Index("ix_contradictions_event", "via_event_id"),
     )
 
 
@@ -262,6 +271,9 @@ class ReviewAction(Base):
     payload: Mapped[dict] = mapped_column(JsonType, nullable=False, default=dict)
     reviewer: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Tamper-evident chain per case (Phase 2). Rows written before 0007 have none.
+    prev_hash: Mapped[str | None] = mapped_column(String(64))
+    hash: Mapped[str | None] = mapped_column(String(64))
 
     __table_args__ = (
         Index("ix_review_actions_target", "target_type", "target_id"),
@@ -292,3 +304,108 @@ class SegmentReview(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (Index("ix_segment_reviews_segment", "segment_id", "created_at"),)
+
+
+# --- Phase 2: events, reports ----------------------------------------------------
+
+
+class Event(TimestampMixin, Base):
+    """A PROPOSED real-world occurrence that several claims may describe.
+
+    Never a fact. The machine proposes an event with its reasons and missing links;
+    only a reviewer can confirm or reject it, and only confirmed events are used to
+    compare accounts. ``association_confidence`` is a heuristic, separate from every
+    other confidence value.
+    """
+
+    __tablename__ = "events"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    case_id: Mapped[uuid.UUID] = _case_fk()
+    event_type: Mapped[str] = mapped_column(String(48), nullable=False)  # e.g. arrival
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    # identifier | vehicle | location | object | ai
+    anchor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    anchor_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    anchor_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("entities.id", ondelete="SET NULL"), nullable=True
+    )
+    event_date: Mapped[str | None] = mapped_column(String(10))  # YYYY-MM-DD or null
+    date_precision: Mapped[str] = mapped_column(String(16), nullable=False)
+    # identifier | context | ai_proposed | reviewer
+    link_basis: Mapped[str] = mapped_column(String(16), nullable=False)
+    association_confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    factors: Mapped[list] = mapped_column(JsonType, nullable=False, default=list)
+    missing_links: Mapped[list] = mapped_column(JsonType, nullable=False, default=list)
+    origin: Mapped[str] = mapped_column(String(32), nullable=False)
+    # proposed | confirmed | rejected
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="proposed")
+    review_note: Mapped[str | None] = mapped_column(Text)
+    reviewed_by: Mapped[str | None] = mapped_column(String(128))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Stable key of the proposal (type + anchor + date + member claims), so a
+    # rejected grouping is never proposed again by the same rules.
+    signature: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("case_id", "signature", name="uq_events_case_signature"),
+        Index("ix_events_case_status", "case_id", "status"),
+    )
+
+
+class EventClaim(Base):
+    """One account of an event: a claim, from one source, with the match reasons."""
+
+    __tablename__ = "event_claims"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    case_id: Mapped[uuid.UUID] = _case_fk()
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    claim_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("claims.id", ondelete="CASCADE"), nullable=False
+    )
+    account_label: Mapped[str] = mapped_column(Text, nullable=False)
+    attribution: Mapped[str | None] = mapped_column(String(128))
+    match_reasons: Mapped[list] = mapped_column(JsonType, nullable=False, default=list)
+    added_by: Mapped[str] = mapped_column(String(16), nullable=False)  # system|reviewer|ai
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint("event_id", "claim_id", name="uq_event_claims_event_claim"),
+        Index("ix_event_claims_claim", "claim_id"),
+    )
+
+
+class Report(Base):
+    """An immutable generated export (investigation report or graph PDF).
+
+    ``snapshot`` lists exactly which records (and their review states) the export
+    was built from, so a report can always be traced and reproduced.
+    """
+
+    __tablename__ = "reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    case_id: Mapped[uuid.UUID] = _case_fk()
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)  # investigation | graph
+    format: Mapped[str] = mapped_column(String(8), nullable=False)  # pdf
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JsonType, nullable=False, default=dict)
+    analysis_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("analysis_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    created_by: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    __table_args__ = (Index("ix_reports_case_kind", "case_id", "kind", "created_at"),)

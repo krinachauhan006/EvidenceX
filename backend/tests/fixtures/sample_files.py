@@ -35,6 +35,15 @@ MP3_BYTES = b"ID3\x03\x00\x00\x00\x00\x00\x00" + b"\x00" * 16
 # M4A: ISO base-media box with "ftyp" at offset 4 and an M4A brand.
 M4A_BYTES = b"\x00\x00\x00\x20ftypM4A \x00\x00\x00\x00M4A mp42isom" + b"\x00" * 8
 
+# MP4: ISO base-media box with "ftyp" at offset 4 and an isom brand.
+MP4_BYTES = b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41" + b"\x00" * 8
+
+# MOV: QuickTime file starting with an "ftyp" box and the "qt  " brand.
+MOV_BYTES = b"\x00\x00\x00\x14ftypqt  \x00\x00\x02\x00qt  " + b"\x00" * 12
+
+# WEBM: EBML header magic.
+WEBM_BYTES = b"\x1a\x45\xdf\xa3\x9f\x42\x86\x81\x01\x42\xf7\x81\x01webm" + b"\x00" * 12
+
 # CSV: plain UTF-8 text with a header row.
 CSV_BYTES = b"date,vendor,amount\n2026-10-12,Acme Ltd,1200.50\n2026-10-13,Bolt Co,87\n"
 
@@ -58,4 +67,7 @@ SAMPLES: dict[str, tuple[str, bytes, str]] = {
     "csv": ("ledger.csv", CSV_BYTES, "tabular"),
     "xlsx": ("workbook.xlsx", XLSX_BYTES, "tabular"),
     "eml": ("message.eml", EML_BYTES, "email"),
+    "mp4": ("clip.mp4", MP4_BYTES, "video"),
+    "mov": ("clip.mov", MOV_BYTES, "video"),
+    "webm": ("clip.webm", WEBM_BYTES, "video"),
 }

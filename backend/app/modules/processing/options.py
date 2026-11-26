@@ -26,4 +26,12 @@ def engine_options(settings: Settings) -> dict[str, Any]:
         "whisper_initial_prompt": settings.whisper_initial_prompt,
         "max_audio_seconds": settings.max_audio_seconds,
         "audio_timeout_seconds": settings.audio_timeout_seconds,
+        # Phase 2
+        "max_video_seconds": settings.max_video_seconds,
+        "video_frame_interval_seconds": settings.video_frame_interval_seconds,
+        "video_max_frames": settings.video_max_frames,
+        "video_scene_threshold": settings.video_scene_threshold,
+        "video_ocr_frames": settings.video_ocr_frames,
+        "video_transcribe_audio": settings.video_transcribe_audio,
+        "ocr_preprocess": settings.ocr_preprocess,
     }

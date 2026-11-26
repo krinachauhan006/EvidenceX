@@ -20,13 +20,15 @@ interface Props {
    * it is polled and when it settles. `null` means the case has never been analysed.
    */
   onRun?: (run: AnalysisRun | null) => void;
+  /** Show the run status only (viewers and reviewers cannot start an analysis). */
+  readOnly?: boolean;
 }
 
 /**
  * Starts a case analysis (claims, entities, relationships, potential
  * inconsistencies) and polls until it settles.
  */
-export function RunAnalysis({ caseId, onDone, onRun }: Props) {
+export function RunAnalysis({ caseId, onDone, onRun, readOnly = false }: Props) {
   const [run, setRun] = useState<AnalysisRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,14 +85,26 @@ export function RunAnalysis({ caseId, onDone, onRun }: Props) {
   const errors = Array.isArray(run?.stats?.errors) ? (run?.stats.errors as unknown[]).length : 0;
   return (
     <div className="flex flex-col items-start gap-1 lg:items-end">
-      <button type="button" onClick={() => void start()} disabled={running} className={BUTTON_PRIMARY}>
-        {running ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-        ) : (
-          <Sparkles className="h-3.5 w-3.5" aria-hidden />
-        )}
-        {running ? "Analysing…" : "Run analysis"}
-      </button>
+      {!readOnly && (
+        <button type="button" onClick={() => void start()} disabled={running} className={BUTTON_PRIMARY}>
+          {running ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {running ? "Analysing…" : "Run analysis"}
+        </button>
+      )}
+      {readOnly && running && (
+        <span className="inline-flex items-center gap-1.5 text-xs text-sky-300">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Analysis in progress
+        </span>
+      )}
+      {running && (
+        <span className="block h-0.5 w-40 overflow-hidden rounded bg-navy-800" aria-hidden>
+          <span className="evx-indeterminate block h-full w-2/5 bg-sky-400/80" />
+        </span>
+      )}
       {run && !running && (
         <span className="max-w-md text-xs text-slate-500 lg:text-right">
           Last run {formatDateTime(run.completed_at ?? run.started_at)} · {methodLabel(run.method)}

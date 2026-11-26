@@ -103,6 +103,12 @@ def _confidence(a: ClaimFacts, b: ClaimFacts, imprecise: bool) -> tuple[float, l
         if c.modality == "image":
             score -= 0.1
             notes.append(f"'{c.evidence_name}' text comes from OCR; characters may be misread")
+        if c.modality == "video":
+            score -= 0.15
+            notes.append(
+                f"'{c.evidence_name}' text comes from a video soundtrack transcript or frame "
+                "OCR; words may be misheard or misread"
+            )
         if any(u.startswith("hedged wording") for u in c.uncertainty):
             score -= 0.15
             notes.append(f"'{c.evidence_name}' uses hedged wording")
@@ -184,10 +190,20 @@ def _alternatives(a: ClaimFacts, b: ClaimFacts, category: str) -> list[Alternati
     return alts
 
 
+def _stated_date(quote: str) -> str | None:
+    """The first unambiguous date written in the statement itself, if any."""
+    from app.modules.analysis.temporal import dates_in
+
+    return next((r.value for r in dates_in(quote) if r.value), None)
+
+
 def _temporal(a: ClaimFacts, b: ClaimFacts, entity_id: str) -> ContradictionDraft | None:
     ia, ib = _interval(a.event_time), _interval(b.event_time)
     if ia is None or ib is None:
         return None  # unparsed or ambiguous ("1030") values are never compared
+    da, db = _stated_date(a.quote), _stated_date(b.quote)
+    if da and db and da != db:
+        return None  # times of day on two different stated dates are not comparable
     gap = _gap(ia, ib)
     if gap <= TIME_TOLERANCE_MINUTES:
         return None
@@ -286,3 +302,185 @@ def detect(claims: list[ClaimFacts]) -> list[ContradictionDraft]:
                     if found:
                         out.setdefault((x.id, y.id, found.category), found)
     return list(out.values())
+
+
+# --- Phase 2: comparisons inside reviewer-confirmed events -------------------------
+#
+# Identifier-based detection above is unchanged. The functions below compare the
+# accounts of an event a REVIEWER has confirmed, so claims without a shared identifier
+# ("the truck") can be compared once a person has agreed they describe one occurrence.
+
+
+def confidence_breakdown(
+    a: ClaimFacts, b: ClaimFacts, *, imprecise: bool, link_basis: str
+) -> tuple[float, list[str], list[dict[str, Any]]]:
+    """Heuristic detection confidence with every factor that moved it.
+
+    Not a probability. It reflects how cleanly the rule matched given source quality
+    (OCR/ASR), hedging, imprecision and how the claims were linked.
+    """
+    score, notes = _confidence(a, b, imprecise)
+    factors: list[dict[str, Any]] = [{"factor": "base rule match", "effect": 0.7}]
+    for c in (a, b):
+        if c.modality == "audio":
+            factors.append({"factor": f"machine transcription: {c.evidence_name}", "effect": -0.15})
+        if c.modality == "image":
+            factors.append({"factor": f"OCR text: {c.evidence_name}", "effect": -0.1})
+        if any(u.startswith("hedged wording") for u in c.uncertainty):
+            factors.append({"factor": f"hedged wording: {c.evidence_name}", "effect": -0.15})
+    if imprecise:
+        factors.append({"factor": "approximate time", "effect": -0.1})
+    if link_basis != "identifier":
+        score = round(max(0.1, score - 0.15), 2)
+        factors.append(
+            {"factor": "linked by reviewer-confirmed event, not by an identifier", "effect": -0.15}
+        )
+        notes.append("the two claims are linked by a confirmed event, not by a shared identifier")
+    return score, notes, factors
+
+
+def _facts_from_member(m: Any) -> ClaimFacts:
+    c = m.claim
+    return ClaimFacts(
+        id=c.id,
+        evidence_id=c.evidence_id,
+        evidence_name=m.account_label,
+        modality=c.modality,
+        quote=c.quote,
+        predicate_key=c.predicate_key,
+        event_time=None,
+        object_value=None,
+        claim_type="date_time",
+        uncertainty=list(c.uncertainty),
+    )
+
+
+def detect_in_event(
+    *,
+    event_title: str,
+    link_basis: str,
+    missing_links: list[str],
+    comparisons: list[Any],
+) -> list[ContradictionDraft]:
+    """Potential inconsistencies for the candidate comparisons of a confirmed event."""
+    out: list[ContradictionDraft] = []
+    for cmp in comparisons:
+        if not cmp.is_candidate:
+            continue
+        x, y = (cmp.a, cmp.b) if cmp.a.claim.id < cmp.b.claim.id else (cmp.b, cmp.a)
+        fa, fb = _facts_from_member(x), _facts_from_member(y)
+        ia, ib = x.claim.interval, y.claim.interval
+        imprecise = ia[0] != ia[1] or ib[0] != ib[1]
+        confidence, notes, factors = confidence_breakdown(
+            fa, fb, imprecise=imprecise, link_basis=link_basis
+        )
+        gap = cmp.gap_minutes or 0
+        severity = "high" if gap > 120 else "medium" if gap > 30 else "low"
+        alternatives = [
+            AlternativeDraft(
+                "The grouped accounts may describe different occurrences (for example two "
+                "vehicles, or two visits on the same day).",
+                None,
+                "A record identifying the specific vehicle or shipment in each account.",
+                "Whether every account refers to the same object and occasion.",
+                "Check each account for an identifier, plate or reference number.",
+            ),
+            *_alternatives(fa, fb, "temporal"),
+        ]
+        if cmp.classification == "possible_timezone":
+            severity = "low"
+            confidence = round(max(0.1, confidence - 0.15), 2)
+            factors.append(
+                {"factor": "whole-hour difference, no time zone stated", "effect": -0.15}
+            )
+            alternatives.insert(
+                0,
+                AlternativeDraft(
+                    "The difference is close to a whole number of hours and no time zone is "
+                    "stated; the sources may use different clocks or time zones.",
+                    None,
+                    "Both sources state the same time zone.",
+                    "The time zone of each record.",
+                    "Confirm each source's time zone.",
+                ),
+            )
+        if x.attribution and y.attribution and x.claim.evidence_id == y.claim.evidence_id:
+            notes.append(
+                f"both accounts are quoted in the same document ({x.claim.evidence_name}) "
+                f"and attributed to different sources ({x.attribution}; {y.attribution})"
+            )
+        out.append(
+            ContradictionDraft(
+                claim_a_id=x.claim.id,
+                claim_b_id=y.claim.id,
+                via_entity_id="",
+                category="temporal",
+                explanation={
+                    "first_states": f"'{x.account_label}' states: \"{x.claim.quote}\"",
+                    "second_states": f"'{y.account_label}' states: \"{y.claim.quote}\"",
+                    "why": (
+                        f"A reviewer grouped these accounts as one event ({event_title}). "
+                        f"{cmp.explanation}"
+                    ),
+                    "uncertain": (
+                        "Whether both accounts describe exactly the same occurrence. "
+                        + (" ".join(missing_links[:3]) if missing_links else "")
+                    ).strip(),
+                    "would_resolve": (
+                        "A timestamped system record (gate log, GPS trace, signed receipt) that "
+                        "identifies the specific vehicle or shipment."
+                    ),
+                    "classification": cmp.classification,
+                    "factors": factors,
+                },
+                severity=severity,
+                detection_confidence=confidence,
+                uncertainty=notes,
+                alternatives=alternatives,
+            )
+        )
+    return out
+
+
+def detect_sequence(
+    conflicts: list[tuple[Any, Any, str]], link_basis: str
+) -> list[ContradictionDraft]:
+    """Potential order inconsistencies between two confirmed events (see events.py)."""
+    out: list[ContradictionDraft] = []
+    for first, later, why in conflicts:
+        fa, fb = _facts_from_member(first), _facts_from_member(later)
+        confidence, notes, factors = confidence_breakdown(
+            fa, fb, imprecise=False, link_basis=link_basis
+        )
+        x, y = (first, later) if first.claim.id < later.claim.id else (later, first)
+        out.append(
+            ContradictionDraft(
+                claim_a_id=x.claim.id,
+                claim_b_id=y.claim.id,
+                via_entity_id="",
+                category="sequence",
+                explanation={
+                    "first_states": f"'{first.account_label}' states: \"{first.claim.quote}\"",
+                    "second_states": f"'{later.account_label}' states: \"{later.claim.quote}\"",
+                    "why": why,
+                    "uncertain": "Whether both events concern the same object on the same trip.",
+                    "would_resolve": "A dated movement record for this object.",
+                    "classification": "sequence_conflict",
+                    "factors": factors,
+                },
+                severity="medium",
+                detection_confidence=confidence,
+                uncertainty=notes,
+                alternatives=[
+                    AlternativeDraft(
+                        "The events may belong to different trips or days.",
+                        None,
+                        "A single trip record covering both events.",
+                        "Trip or reference numbers.",
+                        "Match both events to one trip record.",
+                    ),
+                    *_alternatives(fa, fb, "temporal"),
+                ],
+            )
+        )
+    return out

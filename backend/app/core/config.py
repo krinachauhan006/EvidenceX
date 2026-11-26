@@ -7,9 +7,10 @@ secrets and never log their values.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -32,8 +33,13 @@ class Settings(BaseSettings):
 
     storage_root: str = Field(default="./var/storage", alias="STORAGE_ROOT")
 
-    cors_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:3000"],
+    # NoDecode: the environment value is a comma-separated string (or a JSON list), and
+    # is split by ``_split_cors`` below. Without it pydantic-settings tries json.loads on
+    # "http://a,http://b" and refuses to start.
+    # Both loopback names by default, so the local frontend works whether it is opened
+    # as localhost or 127.0.0.1 (the browser treats them as different sites).
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
         alias="CORS_ORIGINS",
     )
 
@@ -97,7 +103,9 @@ class Settings(BaseSettings):
     # "rule_based" (default, deterministic, offline) or "gemini" (needs GEMINI_API_KEY
     # and network). Gemini is never used unless both are set.
     claim_extractor: str = Field(default="rule_based", alias="CLAIM_EXTRACTOR")
-    gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
+    # "gemini-2.0-flash" is restricted to existing customers since 2026-03; 3.8 Flash is
+    # listed as Stable on the Gemini models page (checked 2026-11). Configurable.
+    gemini_model: str = Field(default="gemini-3.8-flash", alias="GEMINI_MODEL")
     gemini_timeout_seconds: int = Field(default=60, ge=1, alias="GEMINI_TIMEOUT_SECONDS")
     # A case analysis still "running" after this long is treated as abandoned.
     analysis_stale_minutes: int = Field(default=30, ge=1, alias="ANALYSIS_STALE_MINUTES")
@@ -105,12 +113,52 @@ class Settings(BaseSettings):
     # Secret — never logged, never returned in responses.
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
 
+    # --- Phase 2: authentication -------------------------------------------------
+    session_days: int = Field(default=7, ge=1, le=90, alias="SESSION_DAYS")
+    session_cookie_name: str = Field(default="evx_session", alias="SESSION_COOKIE_NAME")
+    # Must be true in production (HTTPS). False only for local http://localhost.
+    cookie_secure: bool = Field(default=False, alias="COOKIE_SECURE")
+    registration_open: bool = Field(default=True, alias="REGISTRATION_OPEN")
+    login_max_failures: int = Field(default=8, ge=1, alias="LOGIN_MAX_FAILURES")
+    login_lockout_minutes: int = Field(default=15, ge=1, alias="LOGIN_LOCKOUT_MINUTES")
+    # Cases created before authentication existed (Phase 1) have no members. They are
+    # given to exactly ONE operator-designated account: the account registering with
+    # this e-mail address becomes their owner. When empty, nobody receives them
+    # automatically; the operator runs ``python -m app.cli claim-legacy-cases EMAIL``.
+    # They are never visible to an arbitrary (e.g. merely the first) account.
+    legacy_cases_owner_email: str = Field(default="", alias="LEGACY_CASES_OWNER_EMAIL")
+
+    # --- Phase 2: video ------------------------------------------------------------
+    max_video_seconds: int = Field(default=1800, ge=1, alias="MAX_VIDEO_SECONDS")
+    max_video_upload_mb: int = Field(default=200, ge=1, alias="MAX_VIDEO_UPLOAD_MB")
+    video_frame_interval_seconds: float = Field(
+        default=10.0, gt=0, alias="VIDEO_FRAME_INTERVAL_SECONDS"
+    )
+    video_max_frames: int = Field(default=60, ge=1, le=500, alias="VIDEO_MAX_FRAMES")
+    # Mean absolute grey-level difference (0-255) that counts as a scene change.
+    video_scene_threshold: float = Field(default=28.0, gt=0, alias="VIDEO_SCENE_THRESHOLD")
+    video_ocr_frames: bool = Field(default=True, alias="VIDEO_OCR_FRAMES")
+    video_transcribe_audio: bool = Field(default=True, alias="VIDEO_TRANSCRIBE_AUDIO")
+
+    # --- Phase 2: OCR preprocessing and isolation -------------------------------------
+    ocr_preprocess: bool = Field(default=True, alias="OCR_PREPROCESS")
+    # inline | subprocess (hard timeout + crash isolation for risky formats)
+    processing_isolation: str = Field(default="subprocess", alias="PROCESSING_ISOLATION")
+    processing_item_timeout_seconds: int = Field(
+        default=2400, ge=10, alias="PROCESSING_ITEM_TIMEOUT_SECONDS"
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_cors(cls, value: object) -> object:
-        """Allow CORS_ORIGINS as a comma-separated string in the environment."""
+        """Allow CORS_ORIGINS as a comma-separated string or a JSON list."""
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            text = value.strip()
+            if text.startswith("["):
+                import json
+
+                return json.loads(text)
+            return [origin.strip().rstrip("/") for origin in text.split(",") if origin.strip()]
         return value
 
 

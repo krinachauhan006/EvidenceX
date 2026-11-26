@@ -219,9 +219,7 @@ class PdfExtractor:
 
         if page_count == 0 or (not segments and not unresolved):
             outcome = "empty"
-            warnings.append(
-                ExtractionWarning("no_text_found", "The PDF has no extractable text.")
-            )
+            warnings.append(ExtractionWarning("no_text_found", "The PDF has no extractable text."))
         elif not segments and unresolved:
             outcome = "needs_ocr"
         elif unresolved or truncated or total_pages > page_count or low_conf:
@@ -247,8 +245,12 @@ class PdfExtractor:
             "ocr_pages": ocr_pages,
         }
         return ExtractionResult(
-            self.name, getattr(pymupdf, "__version__", self.version), outcome, segments,
-            metadata, warnings,
+            self.name,
+            getattr(pymupdf, "__version__", self.version),
+            outcome,
+            segments,
+            metadata,
+            warnings,
         )
 
     def _ocr_scanned_pages(

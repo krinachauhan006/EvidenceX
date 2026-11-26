@@ -7,10 +7,322 @@
 }
 
 body {
-  @apply bg-navy-950 text-slate-200 antialiased;
+  @apply bg-navy-950 font-sans text-slate-200 antialiased;
 }
 
 /* Subtle focus ring that works on the dark surface. */
 *:focus-visible {
-  @apply outline-none ring-2 ring-navy-600 ring-offset-2 ring-offset-navy-950;
+  @apply outline-none ring-2 ring-sky-500/60 ring-offset-2 ring-offset-navy-950;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* In-page anchors land below the sticky landing header instead of under it. */
+  scroll-padding-top: 5.5rem;
+}
+
+/* --- Landing-page motion -------------------------------------------------------------
+   CSS-only animation. Everything inside .evx-motion stops when the visitor asks for
+   reduced motion, or when the on-page pause control adds .evx-paused. */
+
+@keyframes evx-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes evx-dash {
+  to {
+    stroke-dashoffset: -48;
+  }
+}
+
+@keyframes evx-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    r: 5;
+  }
+  50% {
+    opacity: 1;
+    r: 7;
+  }
+}
+
+@keyframes evx-scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(400%);
+  }
+}
+
+.evx-float {
+  animation: evx-float 6s ease-in-out infinite;
+}
+.evx-dash {
+  stroke-dasharray: 6 10;
+  animation: evx-dash 2.4s linear infinite;
+}
+.evx-pulse {
+  animation: evx-pulse 2.8s ease-in-out infinite;
+}
+.evx-scan {
+  animation: evx-scan 3.6s ease-in-out infinite;
+}
+
+/* Hero event node: one soft halo breathing slowly (no flashing: >2 s period,
+   opacity never above 0.22). */
+@keyframes evx-halo {
+  0%,
+  100% {
+    opacity: 0.06;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.22;
+    transform: scale(1.06);
+  }
+}
+.evx-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: evx-halo 3.2s ease-in-out infinite;
+}
+
+@keyframes evx-pulse-soft {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.evx-pulse-soft {
+  animation: evx-pulse-soft 2.6s ease-in-out infinite;
+}
+
+.evx-paused *,
+.evx-paused {
+  animation-play-state: paused !important;
+}
+
+/* --- App-wide interaction motion (short, purposeful) --------------------------------- */
+
+@keyframes evx-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes evx-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes evx-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/* Page content and toasts ease in; nothing moves more than a few pixels. */
+.evx-page,
+.evx-toast {
+  animation: evx-rise 220ms ease-out both;
+}
+
+.evx-skeleton {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.08) 37%, rgba(255, 255, 255, 0.03) 63%);
+  background-size: 200% 100%;
+  animation: evx-shimmer 1.4s ease-in-out infinite;
+}
+
+.evx-indeterminate {
+  animation: evx-progress 1.3s ease-in-out infinite;
+}
+
+.evx-card-hover {
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.evx-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px -12px rgba(56, 189, 248, 0.25);
+}
+
+/* Landing-page sections drift up a few pixels as they scroll into view, where the
+   browser supports scroll-driven animations. Position only: text is NEVER faded, so a
+   section that cannot scroll fully into view (e.g. the last one) is still at full
+   contrast. The range completes as soon as the section has entered the viewport. */
+@keyframes evx-drift {
+  from {
+    transform: translateY(12px);
+  }
+  to {
+    transform: none;
+  }
+}
+@supports (animation-timeline: view()) {
+  .evx-reveal {
+    animation: evx-drift linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 60%;
+  }
+}
+
+/* Photographic layers: a light film grain over the darkened photo (SVG noise, inline,
+   no request) so flat overlays do not band. */
+.evx-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+.evx-photo {
+  /* Warm the photographs slightly toward the product palette without recolouring them. */
+  filter: saturate(0.92) contrast(1.04);
+}
+
+/* CSS-only landing artwork (components/landing/backdrop.tsx). It replaces photographs
+   whose usage rights were not verified. Gradients only: no image files, no requests.
+   Each layer is listed top-most first. */
+
+/* Hero: an investigator's desk at night. A warm lamp pool on the left, cool screen
+   light behind and above the opaque case panel, a faint wood grain. Never masked. */
+.evx-art-desk {
+  background:
+    radial-gradient(34rem 24rem at 14% 20%, rgba(255, 214, 150, 0.24), transparent 70%),
+    radial-gradient(44rem 30rem at 72% 42%, rgba(56, 189, 248, 0.18), transparent 70%),
+    radial-gradient(34rem 14rem at 70% 6%, rgba(148, 197, 255, 0.16), transparent 75%),
+    radial-gradient(24rem 10rem at 30% 96%, rgba(255, 214, 150, 0.1), transparent 75%),
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.022) 0 2px, transparent 2px 9px),
+    linear-gradient(180deg, #0f1a2c 0%, #121d31 55%, #182233 100%);
+}
+
+/* The problem: case papers spread across a desk, lit from the right. */
+.evx-art-scatter {
+  background:
+    radial-gradient(40rem 28rem at 82% 30%, rgba(255, 214, 150, 0.14), transparent 70%),
+    linear-gradient(rgba(226, 232, 240, 0.08), rgba(226, 232, 240, 0.08)) 58% 18% / 13rem 9rem no-repeat,
+    linear-gradient(rgba(226, 232, 240, 0.06), rgba(226, 232, 240, 0.06)) 74% 62% / 15rem 10rem no-repeat,
+    linear-gradient(rgba(226, 232, 240, 0.07), rgba(226, 232, 240, 0.07)) 90% 26% / 9rem 12rem no-repeat,
+    linear-gradient(rgba(148, 197, 255, 0.07), rgba(148, 197, 255, 0.07)) 66% 86% / 10rem 7rem no-repeat,
+    radial-gradient(rgba(148, 163, 184, 0.14) 1px, transparent 1.5px) 0 0 / 22px 22px,
+    linear-gradient(180deg, #111a2a 0%, #151e2e 100%);
+}
+
+/* Graph: a corkboard of pinned notes joined by red thread. Each thread is the diagonal
+   of its own tile, so it runs between two pins. */
+.evx-art-threads {
+  background:
+    radial-gradient(circle at 18% 28%, #ef4444 0 4px, transparent 5px),
+    radial-gradient(circle at 46% 18%, #ef4444 0 4px, transparent 5px),
+    radial-gradient(circle at 78% 30%, #ef4444 0 4px, transparent 5px),
+    radial-gradient(circle at 34% 72%, #ef4444 0 4px, transparent 5px),
+    radial-gradient(circle at 66% 78%, #ef4444 0 4px, transparent 5px),
+    linear-gradient(to top right, transparent calc(50% - 1px), rgba(220, 38, 38, 0.55) 50%, transparent calc(50% + 1px)) 18% 18% / 28% 10% no-repeat,
+    linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(220, 38, 38, 0.55) 50%, transparent calc(50% + 1px)) 46% 18% / 32% 12% no-repeat,
+    linear-gradient(to top right, transparent calc(50% - 1px), rgba(220, 38, 38, 0.5) 50%, transparent calc(50% + 1px)) 34% 30% / 44% 48% no-repeat,
+    linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(220, 38, 38, 0.5) 50%, transparent calc(50% + 1px)) 18% 28% / 16% 44% no-repeat,
+    linear-gradient(rgba(241, 236, 220, 0.1), rgba(241, 236, 220, 0.1)) 14% 34% / 9rem 6rem no-repeat,
+    linear-gradient(rgba(241, 236, 220, 0.09), rgba(241, 236, 220, 0.09)) 80% 36% / 8rem 7rem no-repeat,
+    linear-gradient(rgba(241, 236, 220, 0.08), rgba(241, 236, 220, 0.08)) 62% 84% / 10rem 6rem no-repeat,
+    radial-gradient(rgba(120, 84, 52, 0.35) 1px, transparent 2px) 0 0 / 9px 9px,
+    linear-gradient(180deg, #231a13 0%, #1b1510 100%);
+}
+
+/* Final call to action: notes on a board under a hanging lamp (right half). */
+.evx-art-lamp {
+  background:
+    radial-gradient(26rem 22rem at 62% 0%, rgba(255, 214, 150, 0.3), transparent 72%),
+    linear-gradient(rgba(241, 236, 220, 0.1), rgba(241, 236, 220, 0.1)) 38% 30% / 7rem 5rem no-repeat,
+    linear-gradient(rgba(241, 236, 220, 0.08), rgba(241, 236, 220, 0.08)) 64% 46% / 8rem 6rem no-repeat,
+    linear-gradient(rgba(241, 236, 220, 0.07), rgba(241, 236, 220, 0.07)) 86% 24% / 6rem 8rem no-repeat,
+    radial-gradient(circle at 42% 31%, #ef4444 0 3px, transparent 4px),
+    radial-gradient(circle at 67% 47%, #ef4444 0 3px, transparent 4px),
+    linear-gradient(180deg, #161b24 0%, #11151d 100%);
+}
+
+/* Events (framed): a notebook page with pinned photographs joined by red thread. */
+.evx-art-map {
+  background:
+    radial-gradient(circle at 24% 30%, #ef4444 0 3px, transparent 4px),
+    radial-gradient(circle at 62% 24%, #ef4444 0 3px, transparent 4px),
+    radial-gradient(circle at 78% 66%, #ef4444 0 3px, transparent 4px),
+    linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(220, 38, 38, 0.65) 50%, transparent calc(50% + 1px)) 24% 24% / 38% 6% no-repeat,
+    linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(220, 38, 38, 0.65) 50%, transparent calc(50% + 1px)) 62% 24% / 16% 42% no-repeat,
+    linear-gradient(rgba(15, 23, 42, 0.55), rgba(15, 23, 42, 0.55)) 18% 36% / 22% 30% no-repeat,
+    linear-gradient(rgba(15, 23, 42, 0.5), rgba(15, 23, 42, 0.5)) 70% 74% / 20% 24% no-repeat,
+    linear-gradient(90deg, transparent 10%, rgba(220, 38, 38, 0.4) 10% calc(10% + 2px), transparent calc(10% + 2px)),
+    repeating-linear-gradient(180deg, transparent 0 21px, rgba(100, 116, 139, 0.35) 21px 22px),
+    linear-gradient(180deg, #4a4538 0%, #3b372d 100%);
+}
+
+/* Human in the loop (framed): fingerprint cards. Concentric ridges masked to the
+   shape of a print, on card stock. */
+.evx-art-ridges {
+  background: linear-gradient(180deg, #1d2534 0%, #171e2b 100%);
+}
+.evx-art-ridges::before,
+.evx-art-ridges::after {
+  content: "";
+  position: absolute;
+  background: repeating-radial-gradient(ellipse at 50% 55%, rgba(203, 213, 225, 0.42) 0 1.5px, transparent 1.5px 6px);
+  -webkit-mask-image: radial-gradient(ellipse 46% 48% at 50% 52%, #000 62%, transparent 74%);
+  mask-image: radial-gradient(ellipse 46% 48% at 50% 52%, #000 62%, transparent 74%);
+}
+.evx-art-ridges::before {
+  inset: 10% 30% 34% 14%;
+}
+.evx-art-ridges::after {
+  inset: 46% 12% 8% 46%;
+  opacity: 0.7;
+}
+
+/* Subtle engineering grid used behind hero and empty states. */
+.evx-grid-bg {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .evx-motion *,
+  .evx-motion,
+  .evx-page,
+  .evx-toast,
+  .evx-reveal,
+  .evx-skeleton,
+  .evx-indeterminate {
+    animation: none !important;
+    transition: none !important;
+  }
+  .evx-card-hover:hover {
+    transform: none;
+  }
 }

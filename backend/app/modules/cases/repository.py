@@ -31,10 +31,17 @@ class CaseRepository:
         status: CaseStatus | None,
         limit: int,
         offset: int,
+        member_user_id: uuid.UUID | None = None,
     ) -> tuple[list[Case], int]:
         """Return (items, total). Archived cases are excluded unless explicitly
-        requested via ``status``."""
+        requested via ``status``. With ``member_user_id`` only that user's cases."""
         filters = []
+        if member_user_id is not None:
+            from app.modules.auth.models import CaseMember
+
+            filters.append(
+                Case.id.in_(select(CaseMember.case_id).where(CaseMember.user_id == member_user_id))
+            )
         if status is not None:
             filters.append(Case.status == status)
         else:
@@ -42,15 +49,13 @@ class CaseRepository:
             filters.append(Case.status != "archived")
 
         total = self._db.scalar(select(func.count()).select_from(Case).where(*filters)) or 0
-        rows = (
-            self._db.scalars(
-                select(Case)
-                .where(*filters)
-                .order_by(Case.updated_at.desc())
-                .limit(limit)
-                .offset(offset)
-            ).all()
-        )
+        rows = self._db.scalars(
+            select(Case)
+            .where(*filters)
+            .order_by(Case.updated_at.desc())
+            .limit(limit)
+            .offset(offset)
+        ).all()
         return list(rows), int(total)
 
     def update(self, case: Case) -> Case:

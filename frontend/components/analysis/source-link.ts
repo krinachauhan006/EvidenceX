@@ -43,6 +43,7 @@ export function sourceHref(caseId: string, target: SourceTarget): string {
     if (finite(loc.page)) params.set("page", String(loc.page));
     const t = finite(loc.word_start) ? loc.word_start : loc.start;
     if (loc.kind === "audio" && finite(t)) params.set("t", String(Math.round(t * 10) / 10));
+    if (loc.kind === "video" && finite(loc.t)) params.set("t", String(Math.round(loc.t * 1000) / 1000));
   }
   return `/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(
     target.evidenceId,

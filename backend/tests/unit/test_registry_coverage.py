@@ -35,6 +35,9 @@ def test_supported_extensions_match_the_documented_set():
         ".csv",
         ".xlsx",
         ".eml",
+        ".mp4",
+        ".mov",
+        ".webm",
     }
 
 
@@ -64,3 +67,13 @@ def test_unregister_removes_a_type():
     registry.unregister("image/png")
     assert not registry.supports("image/png")
     registry.unregister("image/png")  # removing twice is harmless
+
+
+def test_cors_origins_accept_comma_separated_and_json_env(monkeypatch):
+    """Deployment docs use CORS_ORIGINS=a,b; this used to crash at startup."""
+    monkeypatch.setenv("CORS_ORIGINS", "http://localhost:3100, https://app.example.org/")
+    assert Settings().cors_origins == ["http://localhost:3100", "https://app.example.org"]
+    monkeypatch.setenv("CORS_ORIGINS", '["http://a.example"]')
+    assert Settings().cors_origins == ["http://a.example"]
+    monkeypatch.setenv("CORS_ORIGINS", "http://only.example")
+    assert Settings().cors_origins == ["http://only.example"]

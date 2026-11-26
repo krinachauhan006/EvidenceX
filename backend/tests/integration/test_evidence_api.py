@@ -83,13 +83,9 @@ def test_signature_mismatch_rejected(client):
     assert res.status_code == 400
 
 
-def test_oversized_file_rejected(client, monkeypatch):
+def test_oversized_file_rejected(client, settings, monkeypatch):
     case_id = _make_case(client)
-    # Shrink the limit to 0 MB-ish by patching the setting on the service instance
-    # via a tiny override: build a payload above 1 byte and set limit below it.
-    from app.core import config
-
-    settings = config.get_settings()
+    # The client's evidence service uses the per-test ``settings`` object.
     monkeypatch.setattr(settings, "max_upload_size_mb", 0, raising=False)
     # 0 MB limit -> any non-empty file is oversized.
     res = _upload(client, case_id, "pdf")

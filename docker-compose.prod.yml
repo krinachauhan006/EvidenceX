@@ -1,0 +1,54 @@
+# EvidenceX production stack: reverse proxy (HTTPS) + web + API.
+#   docker compose -f docker-compose.prod.yml --env-file deploy/.env.production up -d --build
+# Only Caddy publishes ports. The API and web containers are reachable only on the
+# private network, and no database port is exposed (SQLite lives on the data volume).
+# docker-compose.yml (Postgres on 127.0.0.1) is for local development only.
+name: evidencex
+
+services:
+  api:
+    build:
+      context: ./backend
+      args:
+        INSTALL_AUDIO: "true"
+    env_file: ${EVIDENCEX_ENV_FILE:-deploy/.env.production}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite+pysqlite:////data/evidencex.db}
+      STORAGE_ROOT: /data/storage
+      WHISPER_MODEL_DIR: /data/models
+    volumes:
+      - evidencex_data:/data
+    restart: unless-stopped
+    expose: ["8000"]
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Empty = same origin through Caddy (recommended).
+        NEXT_PUBLIC_API_BASE_URL: ""
+    restart: unless-stopped
+    expose: ["3000"]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  proxy:
+    # Caddy + rate-limit module (sign-in and registration limits per client address).
+    build:
+      context: ./deploy/caddy
+    env_file: ${EVIDENCEX_ENV_FILE:-deploy/.env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on: [api, web]
+
+volumes:
+  evidencex_data: {}  # database, evidence storage, speech model: BACK THIS UP
+  caddy_data: {}
+  caddy_config: {}

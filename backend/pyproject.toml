@@ -51,6 +51,8 @@ select = ["E", "F", "I", "UP", "B"]
 # FastAPI's dependency-injection idiom intentionally calls Depends()/Query() in
 # argument defaults; B008 is a false positive for routers.
 "app/modules/*/router.py" = ["B008"]
+"app/modules/*/router_*.py" = ["B008"]
+"app/modules/auth/deps.py" = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

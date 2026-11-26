@@ -98,11 +98,13 @@ def process_evidence(
 ) -> ProcessAccepted:
     force = payload.force if payload else False
     accepted, overrides = service.enqueue_one(
-        case_id, evidence_id, force=force, audio_model=payload.audio_model if payload else None
+        case_id,
+        evidence_id,
+        force=force,
+        audio_model=payload.audio_model if payload else None,
+        ocr_languages=payload.ocr_languages if payload else None,
     )
-    _schedule(
-        background_tasks, runner, case_id, accepted, force=force, options_override=overrides
-    )
+    _schedule(background_tasks, runner, case_id, accepted, force=force, options_override=overrides)
     return accepted
 
 
@@ -202,3 +204,17 @@ def audio_models(
 ) -> AudioModelList:
     """Speech models found on disk. Nothing is loaded or downloaded."""
     return service.audio_models()
+
+
+# --- OCR languages --------------------------------------------------------------
+
+ocr_router = APIRouter(prefix="/api/ocr", tags=["processing"])
+
+
+@ocr_router.get("/languages")
+def ocr_languages() -> dict:
+    """Tesseract language packs installed on this server. Nothing is downloaded."""
+    from app.core.config import get_settings
+    from app.modules.processing.extractors.ocr_languages import language_report
+
+    return language_report(get_settings().tesseract_cmd, get_settings().tesseract_langs)

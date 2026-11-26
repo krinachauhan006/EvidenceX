@@ -98,11 +98,36 @@ class ProcessingService:
         *,
         force: bool,
         audio_model: str | None = None,
+        ocr_languages: str | None = None,
     ) -> tuple[ProcessAccepted, dict[str, Any]]:
         """Decision plus the engine option overrides the run must use."""
         evidence = self._evidence(case_id, evidence_id)
         overrides = self.check_audio_model(evidence, audio_model)
+        overrides.update(self.check_ocr_languages(evidence, ocr_languages))
         return self._decide([evidence], force=force), overrides
+
+    def check_ocr_languages(self, evidence: Evidence, value: str | None) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if evidence.evidence_type not in ("image", "document", "video"):
+            raise BadRequestError("OCR languages apply to images, PDFs and video only")
+        from app.modules.processing.extractors.ocr_languages import (
+            installed_languages,
+            validate_languages,
+        )
+
+        try:
+            langs, missing = validate_languages(
+                value, installed_languages(self._settings.tesseract_cmd)
+            )
+        except ValueError as exc:
+            raise BadRequestError(str(exc)) from None
+        if missing:
+            raise BadRequestError(
+                f"OCR language pack(s) not installed: {', '.join(missing)}. They are never "
+                "downloaded automatically; see GET /api/ocr/languages for install help"
+            )
+        return {"tesseract_langs": langs}
 
     def enqueue_pending(self, case_id: uuid.UUID) -> ProcessAccepted:
         self._require_case(case_id)
@@ -219,8 +244,12 @@ class ProcessingService:
             items.insert(
                 0,
                 AudioModelOut(
-                    name=default, repo="", available=False, size_bytes=None,
-                    problem="the configured default model is not on disk", is_default=True,
+                    name=default,
+                    repo="",
+                    available=False,
+                    size_bytes=None,
+                    problem="the configured default model is not on disk",
+                    is_default=True,
                 ),
             )
         return AudioModelList(
@@ -233,8 +262,8 @@ class ProcessingService:
         """Engine option overrides for one run. Raises when the model cannot be used."""
         if model is None:
             return {}
-        if evidence.evidence_type != "audio":
-            raise BadRequestError("a speech model can only be chosen for audio evidence")
+        if evidence.evidence_type not in ("audio", "video"):
+            raise BadRequestError("a speech model can only be chosen for audio or video evidence")
         if model not in available_model_names(self._settings.whisper_model_dir):
             raise BadRequestError(
                 f"the speech model '{model}' is not available locally; it is never "

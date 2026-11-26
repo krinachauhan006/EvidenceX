@@ -371,7 +371,7 @@ Python 3.13.15, Node, and ffmpeg are present. Missing items:
 
 ```powershell
 # 1. Python packages (inside backend\.venv); versions resolved by the dry run
-cd "C:\Users\RAJESH M CHAUHAN\Documents\EvidenceX\backend"
+cd backend
 .\.venv\Scripts\python.exe -m pip install pymupdf pillow pytesseract openpyxl defusedxml
 .\.venv\Scripts\python.exe -m pip install faster-whisper          # audio extra
 

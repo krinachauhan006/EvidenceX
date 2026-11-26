@@ -126,7 +126,7 @@ export function ContradictionCard({ caseId, item, onChanged, defaultOpen = false
   }
 
   return (
-    <article className="rounded-lg border border-inconsistency/25 bg-navy-900/70">
+    <article className="rounded-xl border border-inconsistency/25 bg-navy-900/70 transition-colors hover:border-inconsistency/40">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -152,8 +152,19 @@ export function ContradictionCard({ caseId, item, onChanged, defaultOpen = false
                 Based on an earlier run
               </Badge>
             )}
+            {item.via_event_id && (
+              <Badge
+                tone={item.via_event_status === "rejected" ? "red" : "blue"}
+                title="The accounts were compared because a reviewer confirmed they describe one event"
+              >
+                {item.via_event_status === "rejected" ? "event grouping later rejected" : "via confirmed event"}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 text-sm text-slate-400">{exp.why}</p>
+          {item.via_event_title && (
+            <p className="mt-0.5 text-xs text-slate-500">Event: {item.via_event_title}</p>
+          )}
         </div>
         {open ? (
           <ChevronDown className="h-4 w-4 text-slate-500" aria-hidden />
@@ -189,6 +200,25 @@ export function ContradictionCard({ caseId, item, onChanged, defaultOpen = false
               <dd className="mt-0.5 text-slate-200">{exp.would_resolve}</dd>
             </div>
           </dl>
+
+          {exp.factors && exp.factors.length > 0 && (
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-slate-500">
+                What shaped the detection confidence (heuristic, not calibrated)
+              </p>
+              <ul className="mt-1 grid gap-1 text-xs sm:grid-cols-2">
+                {exp.factors.map((f) => (
+                  <li key={f.factor} className="flex justify-between gap-2 rounded border border-navy-800 px-2 py-1 text-slate-400">
+                    <span>
+                      <span className="text-slate-300">{f.factor}</span>
+                      {f.detail ? ` · ${f.detail}` : ""}
+                    </span>
+                    <span className="tabular-nums">{typeof f.effect === "number" ? `${f.effect > 0 ? "+" : ""}${f.effect.toFixed(2)}` : f.effect}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {item.uncertainty.length > 0 && (
             <ul className="space-y-0.5 text-xs text-inconsistency/90">

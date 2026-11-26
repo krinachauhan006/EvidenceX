@@ -20,11 +20,13 @@ from app.modules.processing.extractors.csv_extractor import CsvExtractor
 from app.modules.processing.extractors.eml import EmlExtractor
 from app.modules.processing.extractors.image_ocr import ImageOcrExtractor
 from app.modules.processing.extractors.pdf import PdfExtractor
+from app.modules.processing.extractors.video import VideoExtractor
 from app.modules.processing.extractors.xlsx import XlsxExtractor
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 IMAGE_MIMES = ("image/png", "image/jpeg", "image/webp")
 AUDIO_MIMES = ("audio/wav", "audio/mpeg", "audio/mp4")
+VIDEO_MIMES = ("video/mp4", "video/quicktime", "video/webm")
 
 
 class ExtractorRegistry:
@@ -65,6 +67,10 @@ def build_default_registry(settings: Settings | None = None) -> ExtractorRegistr
     # PyMuPDF is AGPL-3.0 or commercial. PDF_EXTRACTION_ENABLED=false leaves it off.
     if settings.pdf_extraction_enabled:
         registry.register("application/pdf", PdfExtractor())
+
+    video = VideoExtractor(audio=audio)
+    for mime in VIDEO_MIMES:
+        registry.register(mime, video)
     return registry
 
 

@@ -40,6 +40,16 @@ FIXED = [
 TS = "2026-11-19 10:00:00.000000"
 
 
+PHASE2_TABLES = ("users", "auth_sessions", "case_members", "events", "event_claims", "reports")
+PHASE2_COLUMNS = (
+    ("cases", "ai_processing_allowed"),
+    ("claims", "superseded_by_run_id"),
+    ("contradictions", "via_event_id"),
+    ("review_actions", "prev_hash"),
+    ("review_actions", "hash"),
+)
+
+
 def _cfg(url: str) -> Config:
     cfg = Config()
     cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
@@ -379,7 +389,8 @@ def test_migrated_schema_matches_models_exactly(tmp_path):
     Base.metadata.create_all(eng)
     eng.dispose()
     got, want = describe(migrated), describe(reference)
-    assert len(want) == 9 + 4 and {"claims", "cases", "extraction_segments"} <= set(want)
+    # 4 foundation + 9 analysis (0005) + 6 Phase 2 (0007) tables.
+    assert len(want) == 9 + 4 + 6 and {"claims", "cases", "extraction_segments"} <= set(want)
     assert set(got) == set(want)
     for table in want:
         assert got[table] == want[table], table
@@ -394,6 +405,14 @@ def test_comparison_detects_the_0005_drift(tmp_path):
     Base.metadata.create_all(eng)
     eng.dispose()
     got, want = describe(at_0005), describe(reference)
+    # Objects added later by 0007 do not exist at 0005; leave them out of this control.
+    for table in PHASE2_TABLES:
+        want.pop(table, None)
+    for table, column in PHASE2_COLUMNS:
+        want[table]["columns"] = [c for c in want[table]["columns"] if c[0] != column]
+    want["contradictions"]["indexes"] = [
+        i for i in want["contradictions"]["indexes"] if i[0] != "ix_contradictions_event"
+    ]
     differing = set()
     for table in want:
         for (name, ty, nl), (name2, ty2, nl2) in zip(
@@ -408,13 +427,13 @@ def test_comparison_detects_the_0005_drift(tmp_path):
     assert differing == set(FIXED)
 
 
-def test_head_is_0006(tmp_path):
+def test_head_is_0007(tmp_path):
     url = _url(tmp_path / "h.db")
     command.upgrade(_cfg(url), "head")
     eng = create_engine(url)
     with eng.connect() as c:
         assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
-            "0006_analysis_not_null_ts"
+            "0007_phase2"
         )
     eng.dispose()
 
@@ -546,7 +565,8 @@ def test_0006_columns_reject_null(tmp_path):
 @pytest.mark.parametrize("fk_on", [False, True], ids=["alembic-engine", "fk-enforced"])
 def test_0006_downgrade_restores_nullable_and_keeps_data(tmp_path, fk_on):
     url = _url(tmp_path / "d.db")
-    command.upgrade(_cfg(url), "head")
+    # Pinned to 0006: this test is about 0006 alone (0007 is tested separately).
+    command.upgrade(_cfg(url), "0006_analysis_not_null_ts")
     ids = seed(url)
     rows = snapshot(url)
     if fk_on:

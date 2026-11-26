@@ -51,7 +51,7 @@ export function Card({
   return (
     <As
       className={clsx(
-        "rounded-lg border border-navy-800 bg-navy-900/70 shadow-[0_1px_0_0_rgba(255,255,255,0.02)_inset]",
+        "rounded-xl border border-white/[0.06] bg-navy-900/70 shadow-[0_1px_0_0_rgba(255,255,255,0.03)_inset]",
         className,
       )}
     >
@@ -115,9 +115,25 @@ export function StatTile({
 
 export function LoadingState({ label = "Loading…" }: { label?: string }) {
   return (
-    <p className="flex items-center gap-2 py-6 text-sm text-slate-500">
-      <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {label}
-    </p>
+    <div role="status" className="py-6">
+      <p className="flex items-center gap-2 text-sm text-slate-400">
+        <Loader2 className="h-4 w-4 animate-spin text-sky-400" aria-hidden /> {label}
+      </p>
+      <div className="mt-3 h-0.5 max-w-xs overflow-hidden rounded bg-navy-800" aria-hidden>
+        <div className="evx-indeterminate h-full w-2/5 rounded bg-gradient-to-r from-transparent via-sky-400/70 to-transparent" />
+      </div>
+    </div>
+  );
+}
+
+/** Placeholder blocks shown while a list loads. */
+export function Skeleton({ rows = 3, className }: { rows?: number; className?: string }) {
+  return (
+    <div className={clsx("space-y-2", className)} aria-hidden>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="evx-skeleton h-14 rounded-lg border border-navy-800" />
+      ))}
+    </div>
   );
 }
 
@@ -140,20 +156,57 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   );
 }
 
-export function EmptyState({ title, children }: { title: string; children?: React.ReactNode }) {
+export function EmptyState({
+  title,
+  children,
+  icon,
+}: {
+  title: string;
+  children?: React.ReactNode;
+  icon?: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col items-center rounded-lg border border-dashed border-navy-700 px-6 py-10 text-center">
-      <Inbox className="h-6 w-6 text-slate-600" aria-hidden />
-      <p className="mt-2 text-sm font-medium text-slate-300">{title}</p>
-      {children && <div className="mt-1 max-w-md text-sm text-slate-500">{children}</div>}
+    <div className="relative flex flex-col items-center overflow-hidden rounded-xl border border-dashed border-navy-700 px-6 py-12 text-center">
+      <div aria-hidden className="evx-grid-bg pointer-events-none absolute inset-0" />
+      <div className="relative flex h-12 w-12 items-center justify-center rounded-full border border-navy-700 bg-navy-900 text-slate-500 shadow-[0_0_0_6px_rgba(23,35,56,0.5)]">
+        {icon ?? <Inbox className="h-5 w-5" aria-hidden />}
+      </div>
+      <p className="relative mt-3 text-sm font-medium text-slate-200">{title}</p>
+      {children && <div className="relative mt-1 max-w-md text-sm text-slate-500">{children}</div>}
     </div>
+  );
+}
+
+/** A small "?" affordance that explains a term on hover or keyboard focus. */
+export function InfoTip({ text, label = "What does this mean?" }: { text: string; label?: string }) {
+  return (
+    <span className="group relative inline-flex align-middle">
+      <button
+        type="button"
+        aria-label={`${label} ${text}`}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-navy-600 text-[10px] text-slate-400 hover:text-slate-100"
+      >
+        ?
+      </button>
+      {/* display:none until hovered/focused: an invisible-but-laid-out tooltip near the
+          right edge widened the page on narrow screens. Aligned to the trigger's right
+          edge and width-capped so an open tooltip stays on screen. */}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full right-0 z-30 mb-2 hidden w-64 max-w-[min(16rem,80vw)] rounded-md border border-navy-700 bg-navy-950 px-2.5 py-2 text-left text-[11px] font-normal normal-case leading-relaxed tracking-normal text-slate-300 shadow-xl group-hover:block group-focus-within:block"
+      >
+        {text}
+      </span>
+    </span>
   );
 }
 
 export const BUTTON =
   "inline-flex items-center gap-1.5 rounded-md border border-navy-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-50";
 export const BUTTON_PRIMARY =
-  "inline-flex items-center gap-1.5 rounded-md border border-navy-600 bg-navy-700 px-3 py-1.5 text-xs font-medium text-slate-100 hover:bg-navy-600 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center gap-1.5 rounded-md border border-sky-400/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-100 hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-50";
+export const BUTTON_SOLID =
+  "inline-flex items-center justify-center gap-1.5 rounded-md bg-sky-500 px-3.5 py-2 text-sm font-semibold text-navy-950 shadow-[0_0_24px_-6px_rgba(56,189,248,0.6)] hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50";
 export const INPUT =
   "w-full rounded-md border border-navy-700 bg-navy-950 px-2.5 py-1.5 text-sm text-slate-100 placeholder:text-slate-600 focus:border-navy-600 focus:outline-none focus:ring-1 focus:ring-navy-600";
 

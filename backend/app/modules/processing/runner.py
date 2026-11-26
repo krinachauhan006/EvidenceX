@@ -33,7 +33,7 @@ from app.modules.processing.errors import (
     StorageMissingError,
     UnsupportedContentError,
 )
-from app.modules.processing.executor import ExtractionExecutor, InlineExecutor
+from app.modules.processing.executor import ExtractionExecutor, build_executor
 from app.modules.processing.extractors.base import (
     OUTCOMES,
     ExtractionInput,
@@ -259,6 +259,8 @@ def build_default_runner() -> ProcessingRunner:
         session_factory=SessionLocal,
         storage=LocalStorage(settings.storage_root),
         registry=get_registry(),
-        executor=InlineExecutor(),
+        # PROCESSING_ISOLATION=subprocess (default): PDF and video parse in a child
+        # process with a hard timeout; other formats stay inline.
+        executor=build_executor(settings),
         settings=settings,
     )

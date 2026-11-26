@@ -64,6 +64,17 @@ class XlsxLocator(_Locator):
     range: str  # for example "A12:F12"
 
 
+class VideoLocator(_Locator):
+    """A sampled frame (or a text region on it) at an exact media time."""
+
+    kind: Literal["video"] = "video"
+    t: float = Field(ge=0)  # seconds from the start of the video
+    frame_width: int = Field(gt=0)
+    frame_height: int = Field(gt=0)
+    bbox: BBox | None = None  # text region in frame pixels (OCR line), if any
+    unit: Literal["px"] = "px"
+
+
 class EmailLocator(_Locator):
     kind: Literal["email"] = "email"
     part: Literal["header", "body_text", "body_html", "attachment"]
@@ -72,7 +83,13 @@ class EmailLocator(_Locator):
 
 
 Locator = Annotated[
-    PdfLocator | ImageLocator | AudioLocator | CsvLocator | XlsxLocator | EmailLocator,
+    PdfLocator
+    | ImageLocator
+    | AudioLocator
+    | CsvLocator
+    | XlsxLocator
+    | EmailLocator
+    | VideoLocator,
     Field(discriminator="kind"),
 ]
 
@@ -95,4 +112,6 @@ def promoted_columns(locator: _Locator) -> tuple[int | None, float | None, float
         return locator.page, None, None
     if isinstance(locator, AudioLocator):
         return None, locator.start, locator.end
+    if isinstance(locator, VideoLocator):
+        return None, locator.t, locator.t
     return None, None, None

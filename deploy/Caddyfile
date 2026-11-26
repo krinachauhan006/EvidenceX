@@ -1,0 +1,45 @@
+# Single public origin: HTTPS (automatic certificates), API and web on one domain.
+# Same origin keeps the SameSite=Lax session cookie and the CSRF origin check simple.
+# rate_limit comes from the caddy-ratelimit module (deploy/caddy/Dockerfile), which
+# orders itself before basic_auth, so no global "order" option is needed.
+{$EVIDENCEX_DOMAIN} {
+	encode gzip
+	# Uploads: match MAX_VIDEO_UPLOAD_MB (default 200) with some headroom.
+	request_body {
+		max_size 256MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+	# Per client address, in front of the API's own per-e-mail sign-in throttle.
+	# Exceeding a zone answers 429 before the request reaches the API.
+	rate_limit {
+		zone auth_login {
+			match {
+				method POST
+				path /api/auth/login
+			}
+			key {remote_host}
+			# One bucket per IPv6 /64, so rotating addresses inside it does not help.
+			ipv6_prefix 64
+			events 10
+			window 1m
+		}
+		zone auth_register {
+			match {
+				method POST
+				path /api/auth/register
+			}
+			key {remote_host}
+			ipv6_prefix 64
+			events 5
+			window 10m
+		}
+	}
+	@api path /api/* /health
+	reverse_proxy @api api:8000
+	reverse_proxy web:3000
+}

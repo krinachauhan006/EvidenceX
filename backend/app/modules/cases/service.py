@@ -36,11 +36,33 @@ class CaseService:
         status: CaseStatus | None,
         limit: int,
         offset: int,
+        member_user_id: uuid.UUID | None = None,
     ) -> tuple[list[Case], int, int, int]:
         limit = max(1, min(limit, MAX_LIMIT))
         offset = max(0, offset)
-        items, total = self._repo.list(status=status, limit=limit, offset=offset)
+        items, total = self._repo.list(
+            status=status, limit=limit, offset=offset, member_user_id=member_user_id
+        )
         return items, total, limit, offset
+
+    def set_ai_consent(self, case_id: uuid.UUID, allowed: bool) -> Case:
+        """Owner decision, audited. Turning consent off stops future AI calls; it does
+        not delete anything already produced (those results stay labelled AI)."""
+        from app.modules.analysis.audit import record_action
+
+        case = self.get(case_id)
+        before = case.ai_processing_allowed
+        case.ai_processing_allowed = allowed
+        record_action(
+            self._db,
+            case_id,
+            "case",
+            case_id,
+            "ai_consent",
+            from_status="allowed" if before else "not_allowed",
+            to_status="allowed" if allowed else "not_allowed",
+        )
+        return self._repo.update(case)
 
     def update(self, case_id: uuid.UUID, data: CaseUpdate) -> Case:
         case = self.get(case_id)

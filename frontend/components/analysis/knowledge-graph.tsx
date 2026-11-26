@@ -19,6 +19,7 @@ const NODE_STYLE: Record<GraphNode["kind"], { r: number; fill: string; stroke: s
   entity: { r: 11, fill: "#0e7490", stroke: "#67e8f9", label: "Entity" },
   claim: { r: 6, fill: "#334155", stroke: "#cbd5e1", label: "Claim" },
   contradiction: { r: 10, fill: "#78350f", stroke: "#f59e0b", label: "Potential inconsistency" },
+  event: { r: 12, fill: "#312e81", stroke: "#a5b4fc", label: "Event (proposed or confirmed)" },
 };
 
 const EDGE_STYLE: Record<string, { stroke: string; dash?: string; label: string }> = {
@@ -26,6 +27,7 @@ const EDGE_STYLE: Record<string, { stroke: string; dash?: string; label: string 
   mentions: { stroke: "#155e75", label: "mentions entity" },
   conflicts: { stroke: "#f59e0b", label: "potential inconsistency" },
   mentions_same_entity: { stroke: "#475569", dash: "4 4", label: "same identifier across evidence" },
+  account_of: { stroke: "#818cf8", dash: "2 3", label: "account of an event" },
 };
 
 interface View {
@@ -177,7 +179,18 @@ export function KnowledgeGraph({ caseId, graph }: { caseId: string; graph: Graph
                   }}
                 >
                   {matches.has(n.id) && <circle r={s.r + 7} fill="none" stroke="#e2e8f0" strokeDasharray="3 3" />}
-                  {n.kind === "contradiction" ? (
+                  {(isSel || n.id === hovered) && (
+                    <circle r={s.r + 10} fill={s.stroke} opacity={0.12} className="pointer-events-none" />
+                  )}
+                  {n.kind === "event" ? (
+                    <polygon
+                      points={hexagon(s.r)}
+                      fill={s.fill}
+                      stroke={n.status === "confirmed" ? "#22c55e" : s.stroke}
+                      strokeDasharray={n.status === "proposed" ? "3 2" : undefined}
+                      strokeWidth={isSel ? 3 : 1.5}
+                    />
+                  ) : n.kind === "contradiction" ? (
                     <rect
                       x={-s.r}
                       y={-s.r}
@@ -234,6 +247,13 @@ export function KnowledgeGraph({ caseId, graph }: { caseId: string; graph: Graph
   );
 }
 
+function hexagon(r: number): string {
+  return Array.from({ length: 6 }, (_, i) => {
+    const a = (Math.PI / 3) * i + Math.PI / 6;
+    return `${(r * Math.cos(a)).toFixed(2)},${(r * Math.sin(a)).toFixed(2)}`;
+  }).join(" ");
+}
+
 function Legend() {
   return (
     <div className="absolute bottom-3 left-3 rounded-md border border-navy-800 bg-navy-900/90 px-3 py-2 text-[11px] text-slate-400">
@@ -242,7 +262,10 @@ function Legend() {
         {Object.entries(NODE_STYLE).map(([k, s]) => (
           <li key={k} className="flex items-center gap-1.5">
             <span
-              className={clsx("inline-block h-2.5 w-2.5 border", k === "contradiction" ? "rotate-45" : k === "evidence" ? "rounded-sm" : "rounded-full")}
+              className={clsx(
+                "inline-block h-2.5 w-2.5 border",
+                k === "contradiction" ? "rotate-45" : k === "evidence" || k === "event" ? "rounded-sm" : "rounded-full",
+              )}
               style={{ background: s.fill, borderColor: s.stroke }}
             />
             {s.label}
@@ -348,6 +371,11 @@ function SidePanel({
         {node.kind === "contradiction" && (
           <Link className={BUTTON} href={`${root}/contradictions`}>
             Review inconsistency
+          </Link>
+        )}
+        {node.kind === "event" && (
+          <Link className={BUTTON} href={`${root}/events`}>
+            Review event
           </Link>
         )}
       </div>

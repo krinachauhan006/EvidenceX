@@ -32,6 +32,7 @@ import { ClaimCard, Fact, sourceLabel } from "@/components/analysis/claim-card";
 import { WORKSPACE_TABS, parseFocus, type WorkspaceTab } from "@/components/analysis/source-link";
 import { methodLabel } from "@/components/analysis/review-labels";
 import { ExtractionViewer } from "@/components/evidence/extraction-viewer";
+import { VideoViewer } from "@/components/workspace/video-viewer";
 import { errorCodeLabel, outcomeLabel } from "@/components/evidence/processing-labels";
 import {
   Badge,
@@ -329,6 +330,8 @@ function Viewer({ evidence, props }: { evidence: Evidence; props: ViewerProps })
       return <TableViewer {...props} />;
     case "email":
       return <EmailViewer {...props} />;
+    case "video":
+      return <VideoViewer {...props} />;
     default:
       return <EmptyState title="No preview for this file type" />;
   }
@@ -351,7 +354,8 @@ function WorkspaceHeader({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [model, setModel] = useState("");
-  const isAudio = e.evidence_type === "audio";
+  // Video soundtracks are transcribed with the same speech models as audio files.
+  const isAudio = e.evidence_type === "audio" || e.evidence_type === "video";
   const models = useApi((signal) => (isAudio ? listAudioModels(signal) : Promise.resolve(null)), [isAudio]);
   const meta = current?.doc_metadata ?? {};
   const engine = current

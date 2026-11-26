@@ -116,9 +116,23 @@ def open_image(data: bytes, max_pixels: int) -> Any:
 def ocr_lines_for_image(
     engine: OcrEngine, image: Any, options: Mapping[str, Any]
 ) -> tuple[list, float | None]:
-    """Run OCR and group words. Returns (lines, mean word confidence or None)."""
-    raw = engine.recognize(image, options)
+    """Run OCR and group words. Returns (lines, mean word confidence or None).
+
+    With ``ocr_preprocess`` the engine reads a contrast-enhanced, orientation- and
+    skew-corrected copy; boxes are mapped back to the original image coordinates.
+    """
     width, height = image.size
+    steps: list[str] = []
+    if options.get("ocr_preprocess"):
+        from app.modules.processing.extractors.ocr_preprocess import map_data_back, prepare
+
+        processed, ctx = prepare(image, options)
+        raw = map_data_back(engine.recognize(processed, options), ctx)
+        steps = ctx["steps"]
+    else:
+        raw = engine.recognize(image, options)
+    if isinstance(options, dict):
+        options.setdefault("_ocr_steps", steps)  # read back by the extractor (metadata)
     lines = group_words_into_lines(raw, width, height)
     words = [w["confidence"] for line in lines for w in line.words]
     mean = sum(words) / len(words) if words else None
@@ -193,5 +207,12 @@ class ImageOcrExtractor:
             "mean_engine_confidence": mean,
             "exif": exif,
             "exif_orientation_applied": True,
+            "text_source": "ocr",  # never digitally embedded text
+            "ocr_preprocessing": list(options.get("_ocr_steps") or [])
+            if isinstance(options, dict)
+            else [],
+            "low_confidence_lines": sum(
+                1 for s in segments if (s.engine_confidence or 0) < min_conf
+            ),
         }
         return ExtractionResult(self.name, engine_version, outcome, segments, metadata, warnings)

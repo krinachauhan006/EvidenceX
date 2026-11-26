@@ -1,7 +1,7 @@
 // Typed client for the analysis endpoints (backend/app/modules/analysis/router.py).
 // Every path is scoped to a case.
 
-import { API_BASE, ApiError, apiFetch } from "@/lib/api/client";
+import { apiBlob, apiFetch } from "@/lib/api/client";
 import type {
   AnalysisRun,
   ClaimAction,
@@ -309,10 +309,5 @@ export async function fetchPdfPageImage(
   dpi: number,
   signal?: AbortSignal,
 ): Promise<Blob> {
-  const res = await fetch(
-    `${API_BASE}${base(caseId)}/evidence/${evidenceId}/pages/${page}/image?dpi=${dpi}`,
-    { cache: "no-store", signal },
-  );
-  if (!res.ok) throw new ApiError(res.status, `Request failed (${res.status})`);
-  return res.blob();
+  return apiBlob(`${base(caseId)}/evidence/${evidenceId}/pages/${page}/image?dpi=${dpi}`, signal);
 }

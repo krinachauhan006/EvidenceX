@@ -199,6 +199,8 @@ class AnalysisRepository:
             )
         if current_only:
             stmt = stmt.where(Extraction.is_current.is_(True))
+            # Claims replaced by a later method's run are kept for audit, not shown.
+            stmt = stmt.where(Claim.superseded_by_run_id.is_(None))
         if claim_ids is not None:
             stmt = stmt.where(Claim.id.in_(list(claim_ids)))
         total = int(self._db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)

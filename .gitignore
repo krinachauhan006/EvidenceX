@@ -72,10 +72,17 @@ backups/
 # ==========================================
 # Evidence uploads and private user data
 # ==========================================
-uploads/
-storage/
-evidence/
-user_uploads/
+# Anchored to the repository root: unanchored "storage/" and "evidence/" also matched
+# SOURCE folders (backend/app/storage, backend/app/modules/evidence,
+# frontend/components/evidence, the case evidence route), leaving them out of git.
+# Runtime evidence lives in backend/var/ (ignored below).
+/uploads/
+/storage/
+/evidence/
+/user_uploads/
+/var/
+backend/uploads/
+backend/storage/
 
 # Project runtime data
 backend/var/

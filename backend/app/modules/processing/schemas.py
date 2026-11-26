@@ -89,6 +89,9 @@ class ProcessRequest(BaseModel):
     # Speech model for this run (audio only). Must be available locally; it is never
     # downloaded and never replaced by a different model. None = configured default.
     audio_model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]{1,64}$")
+    # OCR languages for this run (images, scanned PDFs, video frames), e.g. "eng+deu".
+    # Every pack must be installed; nothing is downloaded or substituted.
+    ocr_languages: str | None = Field(default=None, pattern=r"^[a-z_+]{3,64}$")
 
 
 class AudioModelOut(BaseModel):

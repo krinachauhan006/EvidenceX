@@ -75,20 +75,34 @@ class RuleBasedClaimExtractor:
         return extract.extract_claims(segments)
 
 
-def build_claim_extractor(settings: Settings) -> ClaimExtractor:
-    """The configured extractor. Gemini only when explicitly enabled AND keyed."""
-    if settings.claim_extractor == "gemini" and settings.gemini_api_key:
-        from app.ai.claims_llm import GeminiClaimExtractor
+def build_claim_extractor(settings: Settings, *, ai_allowed: bool = True) -> ClaimExtractor:
+    """The configured extractor. AI only when explicitly enabled, keyed on the server,
+    AND (Phase 2) allowed for the case by its owner. Otherwise: rule-based."""
+    mode = settings.claim_extractor
+    if mode in ("gemini", "hybrid") and settings.gemini_api_key and ai_allowed:
+        from app.ai.claims_llm import GeminiClaimExtractor, HybridClaimExtractor
         from app.ai.gemini_client import GeminiClient
 
-        return GeminiClaimExtractor(
+        ai = GeminiClaimExtractor(
             GeminiClient(
                 api_key=settings.gemini_api_key,
                 model=settings.gemini_model,
                 timeout_seconds=settings.gemini_timeout_seconds,
             )
         )
+        return HybridClaimExtractor(ai, RuleBasedClaimExtractor()) if mode == "hybrid" else ai
     return RuleBasedClaimExtractor()
+
+
+def ai_block_reason(settings: Settings, ai_allowed: bool) -> str | None:
+    """Why AI extraction is not used for a run (None when it is)."""
+    if settings.claim_extractor not in ("gemini", "hybrid"):
+        return "AI extraction is not enabled on this server (CLAIM_EXTRACTOR=rule_based)"
+    if not settings.gemini_api_key:
+        return "no AI provider key is configured on the server"
+    if not ai_allowed:
+        return "the case owner has not allowed external AI processing for this case"
+    return None
 
 
 def ground(draft: ClaimDraft, segment: ExtractionSegment | None) -> ClaimDraft:
@@ -132,11 +146,27 @@ class AnalysisRunner:
     ) -> None:
         self._session_factory = session_factory
         self._settings = settings
-        self._extractor = extractor or build_claim_extractor(settings)
+        # An explicitly injected extractor (tests) is always used. Otherwise the
+        # extractor is chosen per case at run time, honouring the case's AI consent.
+        self._fixed = extractor is not None
+        self._extractor = extractor or RuleBasedClaimExtractor()
 
     @property
     def method(self) -> str:
         return self._extractor.method
+
+    def _select_extractor(self, db: Session, case_id: uuid.UUID, stats: dict) -> None:
+        if self._fixed:
+            return
+        from app.modules.cases.models import Case
+
+        case = db.get(Case, case_id)
+        allowed = bool(case and case.ai_processing_allowed)
+        self._extractor = build_claim_extractor(self._settings, ai_allowed=allowed)
+        stats["extractor"] = self._extractor.method
+        reason = ai_block_reason(self._settings, allowed)
+        if reason:
+            stats["ai_not_used_reason"] = reason
 
     def run(self, case_id: uuid.UUID, run_id: uuid.UUID) -> None:
         """Analyse the case. Never raises."""
@@ -159,10 +189,14 @@ class AnalysisRunner:
                 "errors": [],
             }
             try:
+                self._select_extractor(db, case_id, stats)
                 cache: dict[tuple[str, str], Entity] = {}
                 for extraction, evidence in repo.current_extractions(case_id):
                     stats["evidence_total"] += 1
-                    if repo.extraction_has_claims(extraction.id, self.method):
+                    skip_method = (
+                        "gemini_claims_v1" if self._extractor.method == "hybrid" else self.method
+                    )
+                    if repo.extraction_has_claims(extraction.id, skip_method):
                         stats["evidence_skipped"] += 1
                         continue
                     try:
@@ -182,6 +216,24 @@ class AnalysisRunner:
                     db.commit()
                 with db.begin_nested():
                     self._link_and_detect(repo, case_id, stats)
+                hybrid = self._extractor
+                if getattr(hybrid, "fallback_items", None) is not None:
+                    stats["ai_items"] = hybrid.ai_items  # type: ignore[attr-defined]
+                    stats["fallback_items"] = hybrid.fallback_items  # type: ignore[attr-defined]
+                    stats["fallback_reasons"] = dict(hybrid.fallback_reasons)  # type: ignore[attr-defined]
+                # Phase 2: propose events (never confirmed automatically). Isolated so a
+                # failure here cannot undo the claims and links above.
+                stats["events_proposed"] = 0
+                try:
+                    from app.modules.analysis.event_service import EventService
+
+                    with db.begin_nested():
+                        stats["events_proposed"] = EventService(db).propose(case_id)
+                except Exception as exc:  # noqa: BLE001
+                    stats["errors"].append({"step": "events", "error_type": type(exc).__name__})
+                    logger.error(
+                        "event proposal failed case=%s error_type=%s", case_id, type(exc).__name__
+                    )
                 run.status = "completed"
                 run.stats = stats
                 run.completed_at = utcnow()
@@ -244,9 +296,11 @@ class AnalysisRunner:
             ground(draft, segment)
             keyed.setdefault(draft.dedupe_key(str(evidence.id)), draft)
         existing = repo.existing_dedupe_keys(run.case_id, keyed)
+        created_methods: set[str] = set()
         for key, draft in keyed.items():
             if key in existing:
                 continue
+            created_methods.add(draft.method)
             claim = Claim(
                 case_id=run.case_id,
                 evidence_id=evidence.id,
@@ -294,6 +348,24 @@ class AnalysisRunner:
                     )
                     stats["mentions_created"] += 1
             repo.flush()
+        # A newer method's claims replace older UNREVIEWED claims of this extraction.
+        # They are kept (audit), only hidden; reviewed claims are never superseded.
+        newest = next((m for m in sorted(created_methods) if m != extract.METHOD), None)
+        if newest:
+            from sqlalchemy import update
+
+            result = repo.db.execute(
+                update(Claim)
+                .where(
+                    Claim.extraction_id == extraction.id,
+                    Claim.extraction_method != newest,
+                    Claim.review_status == "unreviewed",
+                    Claim.superseded_by_run_id.is_(None),
+                    Claim.analysis_run_id != run.id,
+                )
+                .values(superseded_by_run_id=run.id)
+            )
+            stats["claims_superseded"] = stats.get("claims_superseded", 0) + (result.rowcount or 0)
 
     def _entity_for(
         self,

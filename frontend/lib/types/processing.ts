@@ -56,13 +56,23 @@ export interface EmailLocator {
   index: number | null; // 0-based part index
 }
 
+export interface VideoLocator {
+  kind: "video";
+  t: number; // seconds from the start of the video
+  frame_width: number;
+  frame_height: number;
+  bbox: BBox | null; // text region on the frame (OCR line), in frame pixels
+  unit: "px";
+}
+
 export type Locator =
   | PdfLocator
   | ImageLocator
   | AudioLocator
   | CsvLocator
   | XlsxLocator
-  | EmailLocator;
+  | EmailLocator
+  | VideoLocator;
 
 // --- extraction runs -----------------------------------------------------------
 

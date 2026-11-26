@@ -1,7 +1,7 @@
 // TypeScript types mirroring the backend evidence schemas
 // (app/modules/evidence/schemas.py).
 
-export type EvidenceType = "document" | "image" | "audio" | "tabular" | "email";
+export type EvidenceType = "document" | "image" | "audio" | "tabular" | "email" | "video";
 export type ProcessingStatus = "pending" | "processing" | "completed" | "failed";
 
 export interface Evidence {

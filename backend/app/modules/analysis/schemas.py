@@ -188,12 +188,26 @@ class EntityMentionOut(BaseModel):
     claim: ClaimBrief
 
 
+class CandidateFactor(BaseModel):
+    factor: str
+    effect: Literal["+", "-"]  # supports / weighs against the records being the same
+    detail: str
+
+
 class CandidateOut(BaseModel):
     """Two entity records that MAY be the same thing. Never merged automatically."""
 
     entity_a: EntityOut
     entity_b: EntityOut
     reason: str
+    # exact | strong | weak | conflicting (see extract.assess_candidate)
+    tier: Literal["exact", "strong", "weak", "conflicting"] = "weak"
+    # Heuristic ordering aid for reviewers; NOT a probability of identity.
+    score: float = 0.0
+    score_kind: Literal["heuristic"] = "heuristic"
+    factors: list[CandidateFactor] = Field(default_factory=list)
+    deferred: bool = False
+    deferred_note: str | None = None
 
 
 class CandidateList(BaseModel):
@@ -217,6 +231,10 @@ class ExplanationOut(BaseModel):
     why: str
     uncertain: str
     would_resolve: str
+    # Phase 2 (optional; absent on Phase 1 records): how the pair was classified and
+    # every factor that moved the heuristic detection confidence.
+    classification: str | None = None
+    factors: list[dict[str, Any]] | None = None
 
 
 class AlternativeOut(BaseModel):
@@ -248,6 +266,9 @@ class ContradictionOut(BaseModel):
     linked_evidence_ids: list[uuid.UUID]
     via_entity_id: uuid.UUID | None
     via_entity_name: str | None
+    via_event_id: uuid.UUID | None = None
+    via_event_title: str | None = None
+    via_event_status: str | None = None  # "rejected" = the grouping was later undone
     claim_a: ClaimBrief
     claim_b: ClaimBrief
     claims_current: bool
@@ -283,7 +304,8 @@ class RelationshipReviewRequest(_ReviewBase):
 
 
 class EntityReviewRequest(_ReviewBase):
-    action: Literal["confirm", "reject", "merge", "unmerge", "mark_distinct", "note"]
+    # defer: keep a candidate pair open for later, with a note (no status change).
+    action: Literal["confirm", "reject", "merge", "unmerge", "mark_distinct", "defer", "note"]
     target_entity_id: uuid.UUID | None = None
 
 
@@ -343,7 +365,7 @@ class ReviewQueueOut(BaseModel):
 
 class GraphNode(BaseModel):
     id: str
-    kind: Literal["evidence", "claim", "entity", "contradiction"]
+    kind: Literal["evidence", "claim", "entity", "contradiction", "event"]
     label: str
     sublabel: str | None = None
     status: str | None = None

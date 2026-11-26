@@ -237,9 +237,7 @@ class ProcessingRepository:
             .execution_options(populate_existing=True)
         )
 
-    def list_extractions(
-        self, case_id: uuid.UUID, evidence_id: uuid.UUID
-    ) -> list[Extraction]:
+    def list_extractions(self, case_id: uuid.UUID, evidence_id: uuid.UUID) -> list[Extraction]:
         return list(
             self._db.scalars(
                 select(Extraction)
@@ -295,9 +293,7 @@ class ProcessingRepository:
         ).all()
         return {r.segment_id: r for r in rows}  # later rows overwrite earlier ones
 
-    def case_overview(
-        self, case_id: uuid.UUID
-    ) -> list[tuple[Evidence, Extraction | None]]:
+    def case_overview(self, case_id: uuid.UUID) -> list[tuple[Evidence, Extraction | None]]:
         """Every evidence item in the case with its current run (if any)."""
         stmt = (
             select(Evidence, Extraction)

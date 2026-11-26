@@ -17,6 +17,7 @@ from app.core.database import Base
 
 # Import models so they register on Base.metadata.
 from app.modules.analysis import models as _analysis_models  # noqa: F401
+from app.modules.auth import models as _auth_models  # noqa: F401
 from app.modules.cases import models as _cases_models  # noqa: F401
 from app.modules.evidence import models as _evidence_models  # noqa: F401
 from app.modules.processing import models as _processing_models  # noqa: F401

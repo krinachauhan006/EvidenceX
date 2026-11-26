@@ -50,8 +50,15 @@ class CaseOut(BaseModel):
     title: str
     description: str | None
     status: CaseStatus
+    ai_processing_allowed: bool = False
     created_at: datetime
     updated_at: datetime
+    # The caller's role on this case (set by the router when authenticated).
+    my_role: str | None = None
+
+
+class ConsentUpdate(BaseModel):
+    ai_processing_allowed: bool
 
 
 class CaseList(BaseModel):

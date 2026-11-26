@@ -166,10 +166,26 @@ export interface Entity {
   created_at: string;
 }
 
+export type CandidateTier = "exact" | "strong" | "weak" | "conflicting";
+
+export interface CandidateFactor {
+  factor: string;
+  /** "+" supports the records being the same; "-" weighs against it. */
+  effect: "+" | "-";
+  detail: string;
+}
+
 export interface Candidate {
   entity_a: Entity;
   entity_b: Entity;
   reason: string;
+  tier: CandidateTier;
+  /** Heuristic ordering aid for reviewers, not a probability of identity. */
+  score: number;
+  score_kind: "heuristic";
+  factors: CandidateFactor[];
+  deferred: boolean;
+  deferred_note: string | null;
 }
 
 export interface EntityDetail extends Entity {
@@ -185,6 +201,10 @@ export interface Explanation {
   why: string;
   uncertain: string;
   would_resolve: string;
+  /** How the comparison rule classified the pair (e.g. conflict_candidate). */
+  classification?: string | null;
+  /** What raised or lowered the heuristic detection confidence. */
+  factors?: { factor: string; effect: number | string; detail?: string }[] | null;
 }
 
 export interface Alternative {
@@ -214,6 +234,10 @@ export interface Contradiction {
   linked_evidence_ids: string[];
   via_entity_id: string | null;
   via_entity_name: string | null;
+  /** The reviewer-confirmed event that linked the two accounts, when there is one. */
+  via_event_id?: string | null;
+  via_event_title?: string | null;
+  via_event_status?: string | null;
   claim_a: ClaimBrief;
   claim_b: ClaimBrief;
   claims_current: boolean;
@@ -233,7 +257,7 @@ export interface ReviewQueue {
   counts: Record<string, number>;
 }
 
-export type GraphNodeKind = "evidence" | "claim" | "entity" | "contradiction";
+export type GraphNodeKind = "evidence" | "claim" | "entity" | "contradiction" | "event";
 
 export interface GraphNode {
   id: string;
@@ -318,7 +342,14 @@ export interface SegmentReviewList {
 }
 
 export type ClaimAction = "verify" | "reject" | "needs_verification" | "edit" | "note";
-export type EntityAction = "confirm" | "reject" | "merge" | "unmerge" | "mark_distinct" | "note";
+export type EntityAction =
+  | "confirm"
+  | "reject"
+  | "merge"
+  | "unmerge"
+  | "mark_distinct"
+  | "defer"
+  | "note";
 export type ContradictionAction =
   | "confirm"
   | "reject"
