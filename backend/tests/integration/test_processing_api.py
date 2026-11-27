@@ -45,9 +45,7 @@ def upload(client, case_id, name="ledger.csv", data=CSV_BYTES):
 
 
 def process(client, case_id, evidence_id, **body):
-    return client.post(
-        f"/api/cases/{case_id}/evidence/{evidence_id}/process", json=body or None
-    )
+    return client.post(f"/api/cases/{case_id}/evidence/{evidence_id}/process", json=body or None)
 
 
 def status_of(client, case_id, evidence_id) -> dict:
@@ -303,7 +301,11 @@ def test_one_failure_does_not_stop_the_batch(client, registry):
 
     summary = client.get(f"/api/cases/{case_id}/processing").json()
     assert summary["counts"] == {
-        "total": 3, "pending": 0, "processing": 0, "completed": 2, "failed": 1,
+        "total": 3,
+        "pending": 0,
+        "processing": 0,
+        "completed": 2,
+        "failed": 1,
     }
 
 
@@ -386,7 +388,11 @@ def test_case_summary(client, registry):
 
     summary = client.get(f"/api/cases/{case_id}/processing").json()
     assert summary["counts"] == {
-        "total": 2, "pending": 1, "processing": 0, "completed": 1, "failed": 0,
+        "total": 2,
+        "pending": 1,
+        "processing": 0,
+        "completed": 1,
+        "failed": 0,
     }
     by_id = {i["evidence_id"]: i for i in summary["items"]}
     assert by_id[done["id"]]["outcome"] == "ok"

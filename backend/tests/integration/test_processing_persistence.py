@@ -144,8 +144,20 @@ def test_existing_stage2_rows_survive_the_migration(db_url):
             "INSERT INTO evidence (id, case_id, original_filename, evidence_type, mime_type, "
             "byte_size, sha256, storage_path, processing_status, processing_error, "
             "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (evidence_id, case_id, "old.pdf", "document", "application/pdf", 10,
-             "b" * 64, "bb/bb/" + "b" * 64, "pending", None, TS, TS),
+            (
+                evidence_id,
+                case_id,
+                "old.pdf",
+                "document",
+                "application/pdf",
+                10,
+                "b" * 64,
+                "bb/bb/" + "b" * 64,
+                "pending",
+                None,
+                TS,
+                TS,
+            ),
         )
 
     command.upgrade(cfg, "head")
@@ -185,10 +197,19 @@ def test_database_allows_only_one_current_run_per_evidence(sessions):
         for run_number in (1, 2):
             db.add(
                 Extraction(
-                    evidence_id=ev.id, case_id=ev.case_id, run_number=run_number,
-                    run_status="completed", is_current=True, extractor="csv",
-                    extractor_version="1", source_sha256=ev.sha256, outcome="ok",
-                    doc_metadata={}, warnings=[], segment_count=0, duration_ms=0,
+                    evidence_id=ev.id,
+                    case_id=ev.case_id,
+                    run_number=run_number,
+                    run_status="completed",
+                    is_current=True,
+                    extractor="csv",
+                    extractor_version="1",
+                    source_sha256=ev.sha256,
+                    outcome="ok",
+                    doc_metadata={},
+                    warnings=[],
+                    segment_count=0,
+                    duration_ms=0,
                     started_at=utcnow(),
                 )
             )
@@ -202,10 +223,19 @@ def test_database_rejects_duplicate_run_numbers(sessions):
         for _ in range(2):
             db.add(
                 Extraction(
-                    evidence_id=ev.id, case_id=ev.case_id, run_number=1,
-                    run_status="failed", is_current=False, extractor="csv",
-                    extractor_version="1", source_sha256=ev.sha256, doc_metadata={},
-                    warnings=[], segment_count=0, duration_ms=0, started_at=utcnow(),
+                    evidence_id=ev.id,
+                    case_id=ev.case_id,
+                    run_number=1,
+                    run_status="failed",
+                    is_current=False,
+                    extractor="csv",
+                    extractor_version="1",
+                    source_sha256=ev.sha256,
+                    doc_metadata={},
+                    warnings=[],
+                    segment_count=0,
+                    duration_ms=0,
+                    started_at=utcnow(),
                 )
             )
         with pytest.raises(IntegrityError):
@@ -220,14 +250,24 @@ def test_many_failed_runs_may_coexist_with_one_current(sessions):
             assert _claim(repo, ev, force=attempt > 1) == attempt
             if attempt == 2:
                 repo.record_failure(
-                    db.get(Evidence, ev.id), run_number=2, started_at=utcnow(),
-                    extractor_name="csv", extractor_version="1", source_sha256=ev.sha256,
-                    error_code="corrupt_file", error_message="x", duration_ms=1,
+                    db.get(Evidence, ev.id),
+                    run_number=2,
+                    started_at=utcnow(),
+                    extractor_name="csv",
+                    extractor_version="1",
+                    source_sha256=ev.sha256,
+                    error_code="corrupt_file",
+                    error_message="x",
+                    duration_ms=1,
                 )
             else:
                 repo.record_success(
-                    db.get(Evidence, ev.id), run_number=attempt, started_at=utcnow(),
-                    result=_result(), source_sha256=ev.sha256, duration_ms=1,
+                    db.get(Evidence, ev.id),
+                    run_number=attempt,
+                    started_at=utcnow(),
+                    result=_result(),
+                    source_sha256=ev.sha256,
+                    duration_ms=1,
                 )
         runs = repo.list_extractions(ev.case_id, ev.id)
         assert [(r.run_number, r.run_status, r.is_current) for r in runs] == [
@@ -246,8 +286,12 @@ def test_failure_while_saving_segments_changes_nothing(sessions, monkeypatch):
         repo = ProcessingRepository(db)
         _claim(repo, ev)
         first = repo.record_success(
-            db.get(Evidence, ev.id), run_number=1, started_at=utcnow(),
-            result=_result(3), source_sha256=ev.sha256, duration_ms=1,
+            db.get(Evidence, ev.id),
+            run_number=1,
+            started_at=utcnow(),
+            result=_result(3),
+            source_sha256=ev.sha256,
+            duration_ms=1,
         )
         first_id = first.id
         _claim(repo, ev, force=True)
@@ -264,8 +308,12 @@ def test_failure_while_saving_segments_changes_nothing(sessions, monkeypatch):
         monkeypatch.setattr(repository_module, "promoted_columns", explode_on_third)
         with pytest.raises(RuntimeError):
             repo.record_success(
-                db.get(Evidence, ev.id), run_number=2, started_at=utcnow(),
-                result=_result(5), source_sha256=ev.sha256, duration_ms=1,
+                db.get(Evidence, ev.id),
+                run_number=2,
+                started_at=utcnow(),
+                result=_result(5),
+                source_sha256=ev.sha256,
+                duration_ms=1,
             )
         db.rollback()
         monkeypatch.setattr(repository_module, "promoted_columns", real)
@@ -276,9 +324,7 @@ def test_failure_while_saving_segments_changes_nothing(sessions, monkeypatch):
         assert repo.get_current_extraction(ev.case_id, ev.id).id == first_id
 
 
-def test_runner_records_failure_when_saving_results_fails(
-    sessions, tmp_path, monkeypatch
-):
+def test_runner_records_failure_when_saving_results_fails(sessions, tmp_path, monkeypatch):
     storage = LocalStorage(tmp_path / "blobs")
     with sessions() as db:
         case, ev = _seed_evidence(db, storage)
@@ -286,8 +332,11 @@ def test_runner_records_failure_when_saving_results_fails(
     registry = ExtractorRegistry()
     registry.register("text/csv", CsvExtractor())
     runner = ProcessingRunner(
-        session_factory=sessions, storage=storage, registry=registry,
-        executor=InlineExecutor(), settings=Settings(),
+        session_factory=sessions,
+        storage=storage,
+        registry=registry,
+        executor=InlineExecutor(),
+        settings=Settings(),
     )
 
     def boom(locator):
@@ -311,9 +360,14 @@ def test_runner_failure_isolation_with_real_commits(sessions, tmp_path):
     with sessions() as db:
         case, good = _seed_evidence(db, storage)
         bad = Evidence(
-            case_id=case.id, original_filename="bad.csv", evidence_type="tabular",
-            mime_type="application/x-bad", byte_size=3, sha256=good.sha256,
-            storage_path="x", processing_status="pending",
+            case_id=case.id,
+            original_filename="bad.csv",
+            evidence_type="tabular",
+            mime_type="application/x-bad",
+            byte_size=3,
+            sha256=good.sha256,
+            storage_path="x",
+            processing_status="pending",
         )
         db.add(bad)
         db.commit()
@@ -322,8 +376,11 @@ def test_runner_failure_isolation_with_real_commits(sessions, tmp_path):
     registry.register("text/csv", CsvExtractor())
     registry.register("application/x-bad", FailingExtractor(CorruptFileError("broken")))
     runner = ProcessingRunner(
-        session_factory=sessions, storage=storage, registry=registry,
-        executor=InlineExecutor(), settings=Settings(),
+        session_factory=sessions,
+        storage=storage,
+        registry=registry,
+        executor=InlineExecutor(),
+        settings=Settings(),
     )
 
     runner.run_batch(case_id, [bad_id, good_id])
@@ -331,10 +388,14 @@ def test_runner_failure_isolation_with_real_commits(sessions, tmp_path):
     with sessions() as db:
         assert db.get(Evidence, bad_id).processing_status == "failed"
         assert db.get(Evidence, good_id).processing_status == "completed"
-        assert db.scalar(
-            select(func.count()).select_from(ExtractionSegment)
-            .where(ExtractionSegment.evidence_id == bad_id)
-        ) == 0
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(ExtractionSegment)
+                .where(ExtractionSegment.evidence_id == bad_id)
+            )
+            == 0
+        )
 
 
 # --- concurrency ------------------------------------------------------------------
@@ -350,8 +411,11 @@ def test_two_workers_racing_for_one_item_produce_one_run(sessions, tmp_path):
 
     def make_runner() -> ProcessingRunner:
         return ProcessingRunner(
-            session_factory=sessions, storage=storage, registry=registry,
-            executor=InlineExecutor(), settings=Settings(),
+            session_factory=sessions,
+            storage=storage,
+            registry=registry,
+            executor=InlineExecutor(),
+            settings=Settings(),
         )
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -374,8 +438,12 @@ def test_cascade_removes_runs_and_segments(sessions):
         repo = ProcessingRepository(db)
         _claim(repo, ev)
         repo.record_success(
-            db.get(Evidence, ev.id), run_number=1, started_at=utcnow(),
-            result=_result(4), source_sha256=ev.sha256, duration_ms=1,
+            db.get(Evidence, ev.id),
+            run_number=1,
+            started_at=utcnow(),
+            result=_result(4),
+            source_sha256=ev.sha256,
+            duration_ms=1,
         )
         assert db.scalar(select(func.count()).select_from(ExtractionSegment)) == 4
         db.delete(db.get(Case, case.id))  # case -> evidence -> extractions -> segments

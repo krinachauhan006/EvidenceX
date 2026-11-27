@@ -121,9 +121,7 @@ def test_workflow_case_lifecycle(client):
     assert client.delete(f"/api/cases/{case_id}").status_code == 404
 
 
-def test_workflow_deleting_a_case_removes_its_evidence_runs_and_blobs(
-    client, storage, db_session
-):
+def test_workflow_deleting_a_case_removes_its_evidence_runs_and_blobs(client, storage, db_session):
     case_id = make_case(client)
     ev = uploaded(client, case_id, "book.xlsx", make_xlsx_bytes())
     process(client, case_id, ev["id"])

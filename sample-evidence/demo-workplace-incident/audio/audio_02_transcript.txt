@@ -1,0 +1,2 @@
+Diagnostic log reported guard sensor bypass warning at 09:20; cause not yet established.
+[Synthetic script for generated test speech]

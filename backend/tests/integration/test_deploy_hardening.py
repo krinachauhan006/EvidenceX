@@ -80,7 +80,9 @@ def _memory_engine():
 
 
 def _production() -> Settings:
-    return Settings(APP_ENV="production")
+    # A valid production configuration (HTTPS cookie), so these tests reach the schema
+    # check; the configuration checks themselves are tested in test_deploy_config.py.
+    return Settings(APP_ENV="production", COOKIE_SECURE=True)
 
 
 def test_production_refuses_a_database_without_alembic_revision():

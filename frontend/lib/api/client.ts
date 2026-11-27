@@ -125,6 +125,9 @@ export function saveBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+export const UPLOAD_TOO_LARGE =
+  "This file is larger than this server accepts for a single upload. Try a smaller file.";
+
 /**
  * Upload a file via XMLHttpRequest so the caller can observe progress. The
  * browser sets the multipart Content-Type (with boundary) itself — we must NOT
@@ -157,6 +160,12 @@ export function apiUpload<T>(
         resolve(parsed as T);
       } else {
         if (xhr.status === 401) redirectToLogin();
+        // 413 can come from the hosting platform before the request reaches the API
+        // (e.g. Vercel's request-size limit), as an HTML or text page: show plain words.
+        if (xhr.status === 413) {
+          reject(new ApiError(413, UPLOAD_TOO_LARGE));
+          return;
+        }
         reject(new ApiError(xhr.status, detailOf(parsed)));
       }
     };

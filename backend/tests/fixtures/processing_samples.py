@@ -328,7 +328,7 @@ def make_xlsx_billion_laughs() -> bytes:
         b'<!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">'
         b'<!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">]>'
         b'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        b"<sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>&c;</t></is></c></row>"
+        b'<sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>&c;</t></is></c></row>'
         b"</sheetData></worksheet>"
     )
     return _rewrite_zip_entry(base, "xl/worksheets/sheet1.xml", lambda _old: bomb)

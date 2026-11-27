@@ -28,8 +28,9 @@ COPY --from=build --chown=web:web /app/public ./public
 COPY --from=build --chown=web:web /app/node_modules ./node_modules
 COPY --from=build --chown=web:web /app/package.json ./package.json
 COPY --from=build --chown=web:web /app/next.config.mjs ./next.config.mjs
-# next.config.mjs imports the CSP builder at start-up.
+# next.config.mjs imports the CSP builder and the API proxy rules at start-up.
 COPY --from=build --chown=web:web /app/lib/csp.mjs ./lib/csp.mjs
+COPY --from=build --chown=web:web /app/lib/api-proxy.mjs ./lib/api-proxy.mjs
 USER web
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

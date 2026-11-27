@@ -29,7 +29,8 @@ from app.modules.evidence.validation import (
     deep_validate,
     resolve_and_validate,
 )
-from app.storage.local_store import CHUNK_SIZE, LocalStorage, Storage
+from app.storage.factory import build_storage
+from app.storage.local_store import CHUNK_SIZE, Storage
 
 logger = get_logger(__name__)
 
@@ -55,7 +56,7 @@ class EvidenceService:
         self._repo = EvidenceRepository(db)
         self._cases = CaseRepository(db)
         self._settings = settings or get_settings()
-        self._storage = storage or LocalStorage(self._settings.storage_root)
+        self._storage = storage or build_storage(self._settings)
 
     # --- helpers ----------------------------------------------------------------
 
@@ -90,8 +91,7 @@ class EvidenceService:
             total += len(chunk)
             if total > max_bytes:
                 raise BadRequestError(
-                    f"file exceeds the maximum upload size of "
-                    f"{self._limit_mb(filename)} MB"
+                    f"file exceeds the maximum upload size of {self._limit_mb(filename)} MB"
                 )
             spool.write(chunk)
         if total == 0:
@@ -101,9 +101,7 @@ class EvidenceService:
 
     # --- operations -------------------------------------------------------------
 
-    def upload(
-        self, case_id: uuid.UUID, *, filename: str, fileobj: BinaryIO
-    ) -> Evidence:
+    def upload(self, case_id: uuid.UUID, *, filename: str, fileobj: BinaryIO) -> Evidence:
         """Validate and store an uploaded file for a case."""
         self._require_case(case_id)
 

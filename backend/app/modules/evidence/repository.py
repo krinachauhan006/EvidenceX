@@ -27,20 +27,14 @@ class EvidenceRepository:
     def get_scoped(self, case_id: uuid.UUID, evidence_id: uuid.UUID) -> Evidence | None:
         """Return the evidence only if it belongs to the given case."""
         return self._db.scalar(
-            select(Evidence).where(
-                Evidence.id == evidence_id, Evidence.case_id == case_id
-            )
+            select(Evidence).where(Evidence.id == evidence_id, Evidence.case_id == case_id)
         )
 
     def list_for_case(self, case_id: uuid.UUID) -> tuple[list[Evidence], int]:
         filters = (Evidence.case_id == case_id,)
-        total = (
-            self._db.scalar(select(func.count()).select_from(Evidence).where(*filters)) or 0
-        )
+        total = self._db.scalar(select(func.count()).select_from(Evidence).where(*filters)) or 0
         rows = self._db.scalars(
-            select(Evidence)
-            .where(*filters)
-            .order_by(Evidence.created_at.desc())
+            select(Evidence).where(*filters).order_by(Evidence.created_at.desc())
         ).all()
         return list(rows), int(total)
 
@@ -59,7 +53,5 @@ class EvidenceRepository:
 
     def hashes_for_case(self, case_id: uuid.UUID) -> list[str]:
         return list(
-            self._db.scalars(
-                select(Evidence.sha256).where(Evidence.case_id == case_id)
-            ).all()
+            self._db.scalars(select(Evidence.sha256).where(Evidence.case_id == case_id)).all()
         )

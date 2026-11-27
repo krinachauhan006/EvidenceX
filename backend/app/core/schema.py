@@ -16,6 +16,20 @@ from sqlalchemy.exc import SQLAlchemyError
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
+
+def migrations_dir() -> Path | None:
+    """The folder holding ``alembic.ini`` and ``alembic/``.
+
+    Normally next to the ``app`` package (a source checkout, the Docker image). When the
+    project is also pip-installed (as hosting platforms may do), ``app`` can be imported
+    from site-packages, where the migration scripts are not; the deployment's working
+    directory (its project root) is then checked."""
+    for candidate in (BACKEND_DIR, Path.cwd()):
+        if (candidate / "alembic.ini").is_file() and (candidate / "alembic").is_dir():
+            return candidate
+    return None
+
+
 SCHEMA_OUTDATED_MESSAGE = (
     "The EvidenceX database is older than this version of the server, so this action "
     "cannot run yet. An administrator must back up the database and then run "
@@ -26,12 +40,15 @@ SCHEMA_OUTDATED_MESSAGE = (
 @lru_cache(maxsize=1)
 def expected_revision() -> str | None:
     """The newest Alembic revision shipped with this code (None if unreadable)."""
+    root = migrations_dir()
+    if root is None:
+        return None
     try:
         from alembic.config import Config
         from alembic.script import ScriptDirectory
 
-        cfg = Config(str(BACKEND_DIR / "alembic.ini"))
-        cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+        cfg = Config(str(root / "alembic.ini"))
+        cfg.set_main_option("script_location", str(root / "alembic"))
         return ScriptDirectory.from_config(cfg).get_current_head()
     except Exception:  # noqa: BLE001 - reporting aid only; never breaks a request
         return None

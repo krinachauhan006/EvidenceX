@@ -58,7 +58,7 @@ def test_basic_header_and_rows():
 
 def test_values_are_preserved_exactly():
     src = (
-        'id,note,when,calc\n'
+        "id,note,when,calc\n"
         '007,"  padded  ",01/02/2026,=SUM(A1:A2)\n'
         '"1,200.00","say ""hi""",2026-02-30,TRUE\n'
     )

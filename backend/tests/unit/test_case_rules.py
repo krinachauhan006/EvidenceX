@@ -68,9 +68,7 @@ def test_archive_preserves_data_and_hides_from_default_list(db_session):
     assert default_total == 0
 
     # Visible when explicitly filtering archived.
-    archived_items, archived_total, _, _ = service.list(
-        status="archived", limit=50, offset=0
-    )
+    archived_items, archived_total, _, _ = service.list(status="archived", limit=50, offset=0)
     assert any(c.id == created.id for c in archived_items)
     assert archived_total == 1
 

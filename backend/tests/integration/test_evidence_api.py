@@ -201,9 +201,7 @@ def test_evidence_not_accessible_via_other_case(client):
 
     # Metadata, download, and delete must all 404 when scoped to the wrong case.
     assert client.get(f"/api/cases/{case_b}/evidence/{ev['id']}").status_code == 404
-    assert (
-        client.get(f"/api/cases/{case_b}/evidence/{ev['id']}/download").status_code == 404
-    )
+    assert client.get(f"/api/cases/{case_b}/evidence/{ev['id']}/download").status_code == 404
     assert client.delete(f"/api/cases/{case_b}/evidence/{ev['id']}").status_code == 404
     # And it is still intact under its real case.
     assert client.get(f"/api/cases/{case_a}/evidence/{ev['id']}").status_code == 200

@@ -82,7 +82,11 @@ def test_forced_failure_then_retry_recovers_and_preserves_history(client, storag
 
         # What the UI polls for the toolbar and badges: the case summary.
         assert api.summary(client, case_id)["counts"] == {
-            "total": 1, "pending": 0, "processing": 0, "completed": 0, "failed": 1,
+            "total": 1,
+            "pending": 0,
+            "processing": 0,
+            "completed": 0,
+            "failed": 1,
         }
         item = api.summary_item(client, case_id, eid)
         assert item["status"] == "failed" and item["error_code"] == "storage_missing"
@@ -228,9 +232,7 @@ def test_each_retry_while_the_problem_persists_is_a_new_failed_attempt(client, s
 
 
 @pytest.mark.parametrize("variant", sorted(CORRUPT_UTF16))
-def test_corrupt_csv_fails_in_the_real_extractor_and_retry_fails_again(
-    client, variant, db_session
-):
+def test_corrupt_csv_fails_in_the_real_extractor_and_retry_fails_again(client, variant, db_session):
     case_id = api.make_case(client)
     ev = api.upload(client, case_id, CORRUPT_UTF16[variant], name="corrupt-utf16.csv")
     eid = ev["id"]

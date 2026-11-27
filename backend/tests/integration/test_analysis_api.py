@@ -362,13 +362,17 @@ def test_graph_nodes_and_edges_are_consistent(client, scenario):
     ids = {n["id"] for n in graph["nodes"]}
     kinds = {n["kind"] for n in graph["nodes"]}
     # Phase 2 adds proposed event nodes when the rules find shared anchors.
-    assert {"evidence", "claim", "entity", "contradiction"} <= kinds <= {
-        "evidence",
-        "claim",
-        "entity",
-        "contradiction",
-        "event",
-    }
+    assert (
+        {"evidence", "claim", "entity", "contradiction"}
+        <= kinds
+        <= {
+            "evidence",
+            "claim",
+            "entity",
+            "contradiction",
+            "event",
+        }
+    )
     assert graph["edges"] and all(e["source"] in ids and e["target"] in ids for e in graph["edges"])
     compact = get(client, f"/api/cases/{case_id}/graph", include_claims=False)
     assert "claim" not in {n["kind"] for n in compact["nodes"]}

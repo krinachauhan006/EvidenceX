@@ -28,6 +28,7 @@ from app.core.config import Settings, get_settings
 from app.core.db_types import utcnow
 from app.core.logging import get_logger
 from app.modules.processing.errors import (
+    DEPENDENCY_MISSING,
     INTERNAL_ERROR,
     ExtractionError,
     StorageMissingError,
@@ -43,9 +44,19 @@ from app.modules.processing.limits import ExtractionLimits
 from app.modules.processing.options import engine_options
 from app.modules.processing.registry import ExtractorRegistry, get_registry
 from app.modules.processing.repository import ProcessingRepository
-from app.storage.local_store import LocalStorage, Storage
+from app.storage.factory import build_storage
+from app.storage.local_store import Storage
 
 logger = get_logger(__name__)
+
+# Shown instead of an install hint when an engine is missing on a Vercel deployment,
+# where the user cannot install system software.
+SERVERLESS_ENGINE_MESSAGE = (
+    "This file type needs a processing engine (OCR, video decoding or speech "
+    "recognition) that is not available on this serverless deployment. The file is "
+    "stored safely and can still be downloaded. To extract it, process it on a full "
+    "EvidenceX installation (Docker or local) connected to the same database and storage."
+)
 
 SessionFactory = Callable[[], AbstractContextManager[Session]]
 
@@ -159,6 +170,8 @@ class ProcessingRunner:
                 _check_result(result)
             except ExtractionError as exc:
                 result, error_code, error_message = None, exc.code, exc.message
+                if error_code == DEPENDENCY_MISSING and getattr(self._settings, "vercel", False):
+                    error_message = SERVERLESS_ENGINE_MESSAGE
             except Exception as exc:  # noqa: BLE001 - isolate any extractor crash
                 result = None
                 logger.error(
@@ -257,7 +270,7 @@ def build_default_runner() -> ProcessingRunner:
     settings = get_settings()
     return ProcessingRunner(
         session_factory=SessionLocal,
-        storage=LocalStorage(settings.storage_root),
+        storage=build_storage(settings),
         registry=get_registry(),
         # PROCESSING_ISOLATION=subprocess (default): PDF and video parse in a child
         # process with a hard timeout; other formats stay inline.

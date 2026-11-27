@@ -1,5 +1,9 @@
 # Deploying EvidenceX
 
+This page covers the Docker deployment (every processing engine included). For Vercel
+with managed PostgreSQL and S3-compatible storage, see
+[`VERCEL_DEPLOYMENT.md`](VERCEL_DEPLOYMENT.md).
+
 Status: the production files below are written and `docker compose ... config` validates
 them. Automated tests check the contracts they rely on (only the proxy publishes ports, one
 API worker, non-root user, no loopback API URL in the web image, rate-limit zones, the

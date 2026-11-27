@@ -93,7 +93,8 @@ _QUANTITY = re.compile(
     re.IGNORECASE,
 )
 _MONEY = re.compile(
-    r"(?:[$€£])\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?(?:usd|eur|gbp)\b", re.IGNORECASE
+    r"(?:[$€£₹])\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?(?:usd|eur|gbp|inr)\b",
+    re.IGNORECASE,
 )
 # The keyword is case-insensitive; the NAME after it is not (scoped "(?-i:...)"), so
 # "Warehouse A" / "gate 4" match but "the site was" does not become a location.
@@ -118,7 +119,9 @@ _UNCERTAINTY = re.compile(
     r"unclear|may be|estimated?)\b",
     re.IGNORECASE,
 )
-_SENTENCE = re.compile(r"[^.!?\n]+(?:[.!?]+|$)")
+# A sentence runs to the next ".", "!", "?" or line break. A "." between two digits is
+# part of a number ("18,400.00 USD", "250.75", "7.15", "1.5.2026"), not a sentence end.
+_SENTENCE = re.compile(r"(?:[^.!?\n]|(?<=\d)\.(?=\d))+(?:[.!?]+|$)")
 
 _PREDICATES = (
     ("arrival", re.compile(r"\barriv(?:al|e|ed|es|ing)\b|\beta\b", re.I)),

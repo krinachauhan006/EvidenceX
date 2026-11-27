@@ -44,9 +44,7 @@ class Evidence(TimestampMixin, Base):
 
     # Processing (Stage 3). Records start as "pending". These fields describe the
     # LATEST processing attempt; the per-run history lives in `extractions`.
-    processing_status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="pending"
-    )
+    processing_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     processing_error_code: Mapped[str | None] = mapped_column(String(48), nullable=True)
     processing_started_at: Mapped[datetime | None] = mapped_column(

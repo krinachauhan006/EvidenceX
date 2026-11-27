@@ -10,12 +10,7 @@ from __future__ import annotations
 from tests.fixtures.processing_samples import make_eml_bytes, make_xlsx_bytes
 
 # A minimal real PDF (header + trivial body). %PDF- signature is what matters here.
-PDF_BYTES = (
-    b"%PDF-1.4\n"
-    b"1 0 obj<</Type/Catalog>>endobj\n"
-    b"trailer<</Root 1 0 R>>\n"
-    b"%%EOF\n"
-)
+PDF_BYTES = b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"
 
 # PNG 8-byte magic followed by a stub IHDR-ish chunk. Signature is the first 8 bytes.
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR" + b"\x00" * 20

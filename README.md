@@ -82,6 +82,7 @@ AI output is schema-validated and labelled as AI in the UI and in reports.
 ## Documentation
 
 [Architecture](docs/ARCHITECTURE.md) · [Deployment, backup and restore](docs/DEPLOYMENT.md)
+· [Vercel + managed Postgres + S3](docs/VERCEL_DEPLOYMENT.md)
 · [Security and privacy](docs/SECURITY.md) · [Third-party licences](docs/THIRD_PARTY_LICENSES.md)
 · [Demo guide](docs/DEMO.md) · [Licence (GNU AGPL-3.0)](LICENSE) · API: `/docs`
 (OpenAPI) on the running backend.
@@ -197,7 +198,8 @@ cd frontend ; node --experimental-strip-types --no-warnings --test tests/*.test.
 | OCR | Needs Tesseract installed on the host (included in the API Docker image) |
 | Audio and video speech | Needs the `audio` extra and a Whisper model downloaded once (never automatic) |
 | Docker images and the production stack (Caddy HTTPS, rate limits) | **Written but not built or run yet.** See [DEPLOYMENT](docs/DEPLOYMENT.md) |
-| Postgres | Supported by the code, but all tests ran on SQLite |
+| Postgres | The full test suite and migration/health tests pass against a local PostgreSQL 17; no managed (cloud) database tested yet |
+| Vercel deployment (frontend + backend, S3 storage) | **Prepared, not deployed.** Proxy and configuration checks tested locally; see [VERCEL_DEPLOYMENT](docs/VERCEL_DEPLOYMENT.md) |
 
 ## Limitations
 

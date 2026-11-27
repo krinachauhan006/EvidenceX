@@ -7,9 +7,9 @@ secrets and never log their values.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -30,8 +30,37 @@ class Settings(BaseSettings):
         default="sqlite+pysqlite:///./var/evidencex.db",
         alias="DATABASE_URL",
     )
+    # --- Postgres connection pool (ignored for SQLite) ------------------------------
+    # Connections kept open per process. Serverless instances each hold their own pool,
+    # so keep this small; the managed database's connection limit is shared by all.
+    database_pool_size: int = Field(default=2, ge=1, le=50, alias="DATABASE_POOL_SIZE")
+    database_max_overflow: int = Field(default=3, ge=0, le=50, alias="DATABASE_MAX_OVERFLOW")
+    # Seconds after which a pooled connection is replaced (managed databases and
+    # poolers close idle connections).
+    database_pool_recycle_seconds: int = Field(
+        default=300, ge=30, alias="DATABASE_POOL_RECYCLE_SECONDS"
+    )
+    # True when DATABASE_URL points at a TRANSACTION-mode pooler (PgBouncer-style, e.g.
+    # Supabase port 6543). Then no client-side pool is kept (the pooler is the pool)
+    # and psycopg prepared statements are disabled, which such poolers do not support.
+    database_transaction_pooler: bool = Field(default=False, alias="DATABASE_TRANSACTION_POOLER")
+
+    # Set to "1" by Vercel in every build and function (read-only here). Enables the
+    # serverless configuration checks in app/core/deploy_checks.py.
+    vercel: bool = Field(default=False, alias="VERCEL")
 
     storage_root: str = Field(default="./var/storage", alias="STORAGE_ROOT")
+
+    # Evidence blob storage: "local" (default, files under STORAGE_ROOT) or "s3" (an
+    # S3-compatible bucket such as Supabase Storage; see app/storage/s3_store.py).
+    storage_backend: Literal["local", "s3"] = Field(default="local", alias="STORAGE_BACKEND")
+    # Used only when STORAGE_BACKEND=s3. Empty endpoint = AWS S3 itself.
+    s3_endpoint_url: str = Field(default="", alias="S3_ENDPOINT_URL")
+    s3_bucket: str = Field(default="", alias="S3_BUCKET")
+    s3_region: str = Field(default="us-east-1", alias="S3_REGION")
+    s3_access_key_id: str = Field(default="", alias="S3_ACCESS_KEY_ID")
+    # Secret — never logged, never returned in responses (SecretStr hides it in repr).
+    s3_secret_access_key: SecretStr = Field(default=SecretStr(""), alias="S3_SECRET_ACCESS_KEY")
 
     # NoDecode: the environment value is a comma-separated string (or a JSON list), and
     # is split by ``_split_cors`` below. Without it pydantic-settings tries json.loads on
@@ -147,6 +176,20 @@ class Settings(BaseSettings):
     processing_item_timeout_seconds: int = Field(
         default=2400, ge=10, alias="PROCESSING_ITEM_TIMEOUT_SECONDS"
     )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _psycopg_driver(cls, value: object) -> object:
+        """Managed providers hand out ``postgres://`` or ``postgresql://`` URLs. Without
+        a driver name SQLAlchemy would look for psycopg2, which is not installed; use
+        psycopg (v3), which is. URLs that already name a driver are left unchanged."""
+        if isinstance(value, str):
+            text = value.strip()
+            for prefix in ("postgres://", "postgresql://"):
+                if text.startswith(prefix):
+                    return "postgresql+psycopg://" + text[len(prefix) :]
+            return text
+        return value
 
     @field_validator("cors_origins", mode="before")
     @classmethod

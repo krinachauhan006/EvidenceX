@@ -1,0 +1,17 @@
+# Files Vercel must never upload or bundle when backend/ is the project root.
+# Local data and secrets: the live database, evidence storage, speech models, backups.
+var/
+.env
+.env.*
+!.env.example
+# Local tooling and caches.
+.venv/
+venv/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+# Not needed at runtime.
+tests/
+Dockerfile
+.dockerignore

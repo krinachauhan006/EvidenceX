@@ -84,8 +84,7 @@ def download_evidence(
     # execution.
     ascii_name = data.original_filename.encode("ascii", "ignore").decode() or "download"
     disposition = (
-        f"attachment; filename=\"{ascii_name}\"; "
-        f"filename*=UTF-8''{quote(data.original_filename)}"
+        f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(data.original_filename)}"
     )
     return StreamingResponse(
         _read_and_close(data.stream),

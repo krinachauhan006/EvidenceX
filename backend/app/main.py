@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from app.core.config import Settings, get_settings
 from app.core.database import engine
+from app.core.deploy_checks import check_deployment_config
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import get_logger
 from app.core.schema import schema_state
@@ -50,6 +51,12 @@ def check_schema_for_production(settings: Settings, db_engine=None) -> None:  # 
     if settings.app_env != "production":
         return
     state = schema_state(db_engine or engine)
+    if state["expected"] is None:
+        raise SchemaNotReadyError(
+            "the migration scripts (alembic.ini and alembic/) were not found next to the "
+            "application or in the working directory, so the required database revision "
+            "is unknown; deploy the whole backend folder"
+        )
     if state["up_to_date"] is not True:
         raise SchemaNotReadyError(
             f"database revision {state['revision']!r} does not match the code's "
@@ -72,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):  # noqa: ANN202
+        check_deployment_config(settings)
         check_schema_for_production(settings)
         yield
 

@@ -1,0 +1,2 @@
+Line P-4 stopped at 08:42; operator requested assistance.
+[Synthetic script for generated test speech]

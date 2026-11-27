@@ -265,7 +265,5 @@ def resolve_and_validate(filename: str, prefix: bytes) -> ResolvedType:
                 "this is an OLE-format Office file (a password-protected or legacy "
                 "workbook), not an .xlsx package. Remove the password or re-save it as .xlsx"
             )
-        raise UnsupportedFileError(
-            f"file content does not match its '{ext}' extension"
-        )
+        raise UnsupportedFileError(f"file content does not match its '{ext}' extension")
     return _EXTENSIONS[ext]

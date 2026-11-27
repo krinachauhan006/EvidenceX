@@ -1,0 +1,2 @@
+Payment matches invoice total; approval exception remains open.
+[Synthetic script for generated test speech]
