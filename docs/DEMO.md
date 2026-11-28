@@ -8,6 +8,10 @@ whole flow once before recording: narrate only what your own run shows.
   model is optional (the demo audio has no speech).
 - Use a fresh browser profile and a demo account, for example `demo@example.org`. Do not
   record a real account or real evidence.
+- Shortcut: on the Investigations dashboard, **Explore Demo Investigation → Load demo
+  case** creates the same six-file case for the signed-in account (its own private
+  copy; loading again opens it). On the Vercel deployment the photo, video and recording
+  wait for the local processing worker; start it before recording.
 
 ## Script
 

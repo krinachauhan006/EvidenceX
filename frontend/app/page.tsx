@@ -29,8 +29,7 @@ import {
   ProvenanceDemo,
   TrustBadge,
 } from "@/components/landing/interactive";
-import { FramedArt, SectionBackdrop } from "@/components/landing/backdrop";
-import { SectionPhoto } from "@/components/landing/photo";
+import { FramedPhoto, SectionPhoto } from "@/components/landing/photo";
 import { Brand } from "@/components/layout/brand";
 import { LICENSE_NAME, LICENSE_URL, SOURCE_CODE_URL } from "@/lib/project";
 
@@ -95,12 +94,15 @@ export default function LandingPage() {
       <main id="main" className="relative">
         {/* A. Hero — investigator's desk at night behind the product illustration */}
         <section className="relative isolate -mt-16 pt-16" data-section="hero">
-          {/* CSS artwork of a desk at night (never masked). The opaque case panel sits
+          {/* Photograph of a desk at night (never masked). The opaque case panel sits
               above it; lamp light and screen glow frame the panel. Overlay: darkest
               behind the headline. Stacked layouts get an even overlay so the
-              full-width text stays readable. */}
-          <SectionBackdrop
-            art="desk"
+              full-width text stays readable. The CSS desk artwork is the fallback. */}
+          <SectionPhoto
+            name="desk"
+            position="50% 50%"
+            fallback="desk"
+            priority
             overlay="bg-[linear-gradient(180deg,rgba(10,15,26,0.7)_0%,rgba(10,15,26,0.62)_55%,rgba(10,15,26,0.55)_100%)] lg:bg-[linear-gradient(90deg,rgba(10,15,26,0.72)_0%,rgba(10,15,26,0.6)_40%,rgba(10,15,26,0.35)_72%,rgba(10,15,26,0.4)_100%)]"
           />
           {/* Cool ambient light pooled behind the case panel. */}
@@ -143,8 +145,10 @@ export default function LandingPage() {
 
         {/* B. The problem — evidence scattered across a desk */}
         <section className="evx-reveal relative isolate" data-section="problem">
-          <SectionBackdrop
-            art="scatter"
+          <SectionPhoto
+            name="forensic"
+            position="50% 50%"
+            fallback="scatter"
             overlay="bg-[linear-gradient(90deg,rgba(10,15,26,0.9)_0%,rgba(10,15,26,0.7)_50%,rgba(10,15,26,0.5)_100%)]"
           />
           <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 py-24 md:px-8 lg:grid-cols-2">
@@ -237,7 +241,14 @@ export default function LandingPage() {
                 ))}
               </ul>
               <div className="mt-8 hidden lg:block">
-                <FramedArt kind="map" aspect="aspect-[16/9]" caption="Illustration, not case evidence" />
+                <FramedPhoto
+                  name="notebook"
+                  alt="Illustrative photograph: an open notebook with a hand-drawn map and red string linking pinned photographs, beside a pen and a torch"
+                  aspect="aspect-[16/9]"
+                  position="50% 55%"
+                  fallback="map"
+                  caption="Illustration, not case evidence"
+                />
               </div>
             </div>
             <EventDemo />
@@ -246,7 +257,7 @@ export default function LandingPage() {
 
         {/* G. Graph — the corkboard of red threads */}
         <section id="graph" className="evx-reveal relative isolate scroll-mt-20" data-section="graph">
-          <SectionBackdrop art="threads" overlay="bg-navy-950/[0.7]" />
+          <SectionPhoto name="corkboard" position="50% 40%" fallback="threads" overlay="bg-navy-950/[0.7]" />
           <div className="mx-auto max-w-7xl px-4 py-24 md:px-8">
             <SectionTitle eyebrow="Connections" title="See how every file, entity and event relates">
               The knowledge graph is drawn from stored records only. Select a node to light up what it touches, then
@@ -263,7 +274,14 @@ export default function LandingPage() {
           </SectionTitle>
           <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.6fr)]">
             <div className="hidden lg:block">
-              <FramedArt kind="ridges" aspect="aspect-[4/5]" caption="Illustration, not case evidence" />
+              <FramedPhoto
+                name="fingerprints"
+                alt="Illustrative photograph: fingerprint cards and photographs spread across a desk beside a red typewriter"
+                aspect="aspect-[4/5]"
+                position="50% 40%"
+                fallback="ridges"
+                caption="Illustration, not case evidence"
+              />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
@@ -327,8 +345,10 @@ export default function LandingPage() {
 
         {/* J. Final call to action — the lamp-lit board, on the right half only */}
         <section className="relative isolate overflow-hidden" data-section="cta">
-          <SectionBackdrop
-            art="lamp"
+          <SectionPhoto
+            name="lampboard"
+            position="50% 30%"
+            fallback="lamp"
             className="md:left-auto md:w-[58%]"
             overlay="bg-[linear-gradient(90deg,#0a0f1a_0%,rgba(10,15,26,0.7)_35%,rgba(10,15,26,0.4)_100%)]"
           />
@@ -356,7 +376,7 @@ export default function LandingPage() {
           <Brand />
           <div className="max-w-xl space-y-2 leading-relaxed">
             <p>
-              Built for the Kiroween 2026 hackathon, developed with the Kiro AI IDE. Examples on this page use fictional
+              Built for hackathons, developed with the Kiro AI IDE. Examples on this page use fictional
               data. EvidenceX is an analytical aid and does not determine guilt, detect deception or authenticate evidence.
             </p>
             <p className="text-xs">Photographs on this page are illustrative and are not case evidence.</p>

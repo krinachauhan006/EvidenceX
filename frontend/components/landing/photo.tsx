@@ -2,13 +2,26 @@
 // public/images/landing (see LANDING_IMAGES.md); the browser picks a width from
 // srcset. Backgrounds are decorative: empty alt + aria-hidden, darkened by an overlay
 // on the image layer only, never by opacity on the text above it.
+//
+// Each photograph can sit on a CSS-artwork fallback (backdrop.tsx): the gradient layer
+// is drawn first and the image covers it, so a section never shows an empty box if an
+// image fails to load or is removed again.
 
 import clsx from "clsx";
+import type { BackdropArt, FramedArtKind } from "@/components/landing/backdrop";
 
-// Only images whose usage rights are cleared may be listed here. Photographs with
-// unverified rights were removed and replaced by CSS artwork (backdrop.tsx).
+// The provenance and rights status of every image listed here is recorded in
+// LANDING_IMAGES.md. Only `wall` is documented as cleared. The other six were restored
+// at the project owner's request on 2026-11-28 with their usage rights still NOT
+// verified; see "Rights not verified" in LANDING_IMAGES.md before publishing.
 export const LANDING_PHOTOS = {
   wall: [1920, 1280, 768],
+  desk: [1376, 960, 640],
+  forensic: [1920, 1280, 768],
+  notebook: [1024, 640],
+  corkboard: [1408, 960, 640],
+  fingerprints: [720, 480],
+  lampboard: [736, 480],
 } as const;
 
 export type LandingPhoto = keyof typeof LANDING_PHOTOS;
@@ -28,6 +41,7 @@ export function SectionPhoto({
   name,
   position,
   overlay,
+  fallback,
   priority = false,
   className,
   imgClassName,
@@ -36,6 +50,8 @@ export function SectionPhoto({
   /** CSS object-position; omit to position with a class instead. */
   position?: string;
   overlay: string;
+  /** CSS artwork drawn underneath, shown if the image is missing. */
+  fallback?: BackdropArt;
   priority?: boolean;
   className?: string;
   /** Extra classes on the <img> itself, e.g. a mask that hides part of the photo. */
@@ -43,6 +59,7 @@ export function SectionPhoto({
 }) {
   return (
     <div aria-hidden className={clsx("pointer-events-none absolute inset-0 -z-10 overflow-hidden", className)} data-photo={name}>
+      {fallback && <div className={`evx-art evx-art-${fallback} absolute inset-0`} data-photo-fallback={fallback} />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={photoSrc(name)}
@@ -51,7 +68,7 @@ export function SectionPhoto({
         alt=""
         loading={priority ? "eager" : "lazy"}
         decoding="async"
-        className={clsx("evx-photo h-full w-full object-cover", imgClassName)}
+        className={clsx("evx-photo relative h-full w-full object-cover", imgClassName)}
         // No position given: the browser default (centre) or a class (imgClassName) decides.
         style={position ? { objectPosition: position } : undefined}
       />
@@ -71,6 +88,7 @@ export function FramedPhoto({
   position = "center",
   aspect = "aspect-[4/3]",
   sizes = "(min-width: 1024px) 28rem, 90vw",
+  fallback,
 }: {
   name: LandingPhoto;
   alt: string;
@@ -78,10 +96,15 @@ export function FramedPhoto({
   position?: string;
   aspect?: string;
   sizes?: string;
+  /** CSS artwork drawn underneath, shown if the image is missing. */
+  fallback?: FramedArtKind;
 }) {
   return (
     <figure className="evx-card-hover group relative overflow-hidden rounded-2xl border border-white/10 bg-navy-900 shadow-2xl shadow-black/50">
       <div className={clsx("relative w-full overflow-hidden", aspect)}>
+        {fallback && (
+          <div aria-hidden className={`evx-art evx-art-${fallback} absolute inset-0`} data-photo-fallback={fallback} />
+        )}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={photoSrc(name)}

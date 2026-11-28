@@ -23,6 +23,7 @@ from app.modules.auth.router import members_router
 from app.modules.auth.router import router as auth_router
 from app.modules.cases.router import router as cases_router
 from app.modules.cases.router import workspace_router
+from app.modules.demo.router import router as demo_router
 from app.modules.evidence.router import router as evidence_router
 from app.modules.processing.router import audio_router, ocr_router
 from app.modules.processing.router import router as processing_router
@@ -152,6 +153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(analysis_router, dependencies=protected)
     app.include_router(phase2_router, dependencies=protected)
     app.include_router(ai_router, dependencies=protected)
+    app.include_router(demo_router, dependencies=protected)
     logger.info("EvidenceX API initialized (env=%s)", settings.app_env)
     return app
 

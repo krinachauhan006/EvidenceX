@@ -31,7 +31,14 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-DEMO_DIR = BACKEND_DIR.parent / "sample-evidence" / "demo-missing-shipment"
+# A byte-identical copy of sample-evidence/demo-missing-shipment, inside the backend
+# package, so a deployment whose root is backend/ (Vercel) ships the files too. A test
+# keeps the two copies identical.
+BUNDLED_DEMO_DIR = Path(__file__).resolve().parent / "demo_assets" / "missing_shipment"
+REPO_DEMO_DIR = BACKEND_DIR.parent / "sample-evidence" / "demo-missing-shipment"
+DEMO_DIR = BUNDLED_DEMO_DIR if BUNDLED_DEMO_DIR.is_dir() else REPO_DEMO_DIR
+# Audit action that marks a case as the user's copy of the demo (survives a rename).
+DEMO_MARKER_ACTION = "demo_case_created"
 DEMO_TITLE = "Missing pallet shipment (demo)"
 DEMO_DESCRIPTION = (
     "Fictional demonstration case built from sample-evidence/demo-missing-shipment. "
@@ -226,3 +233,136 @@ def _collect(
             "proposed_events": count(Event),
             "possible_inconsistencies": count(PotentialContradiction),
         }
+
+
+# --- self-service demo for a signed-in user (POST /api/demo/missing-shipment) -------------
+
+
+@dataclass
+class ProvisionResult:
+    status: str  # "created" | "exists" | "repaired"
+    case_id: uuid.UUID
+    uploaded: list[str] = field(default_factory=list)  # files added by THIS call
+
+
+def _lock_user(db: Session, user_id: uuid.UUID) -> None:
+    """Take the user's row lock until the next commit (a no-op UPDATE: ``updated_at``
+    is set to itself). Concurrent demo requests of the same user are serialized, so
+    a double click cannot create two demo cases or upload a file twice."""
+    from sqlalchemy import update
+
+    from app.modules.auth.models import User
+
+    db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(updated_at=User.updated_at)
+        .execution_options(synchronize_session=False)
+    )
+
+
+def find_user_demo_case(db: Session, user_id: uuid.UUID) -> uuid.UUID | None:
+    """The demo case this user OWNS, if any: the case carrying the demo marker in its
+    audit trail, or (for a case whose marker was never written) the demo title and
+    description. Only the user's own cases are ever considered."""
+    from app.modules.analysis.models import ReviewAction
+    from app.modules.auth.models import CaseMember
+    from app.modules.cases.models import Case
+
+    owned = select(CaseMember.case_id).where(
+        CaseMember.user_id == user_id, CaseMember.role == "owner"
+    )
+    marked = db.scalar(
+        select(ReviewAction.case_id)
+        .where(
+            ReviewAction.case_id.in_(owned),
+            ReviewAction.target_type == "case",
+            ReviewAction.action == DEMO_MARKER_ACTION,
+        )
+        .order_by(ReviewAction.created_at.asc())
+        .limit(1)
+    )
+    if marked is not None:
+        return marked
+    return db.scalar(
+        select(Case.id)
+        .where(
+            Case.id.in_(owned),
+            Case.title == DEMO_TITLE,
+            Case.description == DEMO_DESCRIPTION,
+        )
+        .order_by(Case.created_at.asc())
+        .limit(1)
+    )
+
+
+def _present_files(db: Session, case_id: uuid.UUID) -> set[str]:
+    from app.modules.evidence.models import Evidence
+
+    return set(db.scalars(select(Evidence.original_filename).where(Evidence.case_id == case_id)))
+
+
+def provision_demo_case(
+    db: Session,
+    evidence,  # noqa: ANN001 - EvidenceService bound to ``db`` (storage injected)
+    user,  # noqa: ANN001 - the signed-in User
+    *,
+    demo_dir: Path = DEMO_DIR,
+) -> ProvisionResult:
+    """Give ``user`` their own copy of the Missing Shipment demo case.
+
+    * The case is created through the same services as "New investigation", owned by
+      ``user`` and visible to nobody else.
+    * Idempotent: an existing demo case of this user is returned, never duplicated.
+    * Safe to retry: if an earlier attempt stopped part-way, the missing demo files are
+      uploaded now ("repaired"). Each file is uploaded under the user's row lock and
+      only when the case does not have it yet.
+    * Nothing is processed here. Files are stored exactly as an upload would store
+      them (validated by content, in the configured storage) and start "pending".
+    """
+    from app.modules.analysis.audit import record_action
+    from app.modules.auth.models import CaseMember
+    from app.modules.cases.models import Case
+
+    missing_files = [n for n in DEMO_FILES if not (demo_dir / n).is_file()]
+    if missing_files:
+        raise SeedError("the demo files are not available on this server")
+
+    _lock_user(db, user.id)
+    case_id = find_user_demo_case(db, user.id)
+    status = "exists"
+    if case_id is None:
+        # Case, owner membership and marker in ONE transaction (the repository helpers
+        # commit, which would release the lock between the steps).
+        case = Case(title=DEMO_TITLE, description=DEMO_DESCRIPTION, status="open")
+        db.add(case)
+        db.flush()
+        db.add(CaseMember(case_id=case.id, user_id=user.id, role="owner"))
+        record_action(
+            db,
+            case.id,
+            "case",
+            case.id,
+            DEMO_MARKER_ACTION,
+            to_status="open",
+            note="Fictional demonstration case loaded from the built-in sample evidence.",
+            payload={"files": list(DEMO_FILES)},
+        )
+        db.commit()  # releases the lock; the marker now identifies the case
+        case_id = case.id
+        status = "created"
+    else:
+        db.commit()  # nothing to write; release the lock
+
+    uploaded: list[str] = []
+    for name in DEMO_FILES:
+        _lock_user(db, user.id)
+        if name in _present_files(db, case_id):
+            db.commit()
+            continue
+        with (demo_dir / name).open("rb") as fh:
+            evidence.upload(case_id, filename=name, fileobj=fh)  # commits
+        uploaded.append(name)
+    if status == "exists" and uploaded:
+        status = "repaired"
+    return ProvisionResult(status=status, case_id=case_id, uploaded=uploaded)

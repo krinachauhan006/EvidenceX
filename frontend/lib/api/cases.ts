@@ -45,3 +45,31 @@ export function archiveCase(id: string): Promise<Case> {
 export function deleteCase(id: string): Promise<null> {
   return apiFetch<null>(`/api/cases/${id}`, { method: "DELETE" });
 }
+
+// --- the fictional demo investigation (owned by the signed-in user) ------------------
+
+export interface DemoFile {
+  name: string;
+  processing_status: string;
+  /** Processed by the separate local processing worker, not by this server. */
+  external_worker: boolean;
+}
+
+export interface DemoCase {
+  case_id: string;
+  status: "created" | "exists" | "repaired";
+  title: string;
+  files: DemoFile[];
+  queued: number;
+  awaiting_worker: number;
+}
+
+/** The signed-in user's demo case id, or null when they have not loaded it. */
+export function getDemoCase(signal?: AbortSignal): Promise<{ case_id: string | null }> {
+  return apiFetch<{ case_id: string | null }>("/api/demo/missing-shipment", { signal });
+}
+
+/** Create the user's private copy of the demo case, or return the existing one. */
+export function loadDemoCase(): Promise<DemoCase> {
+  return apiFetch<DemoCase>("/api/demo/missing-shipment", { method: "POST" });
+}

@@ -183,10 +183,17 @@ test("every landing image file exists at every declared width", async () => {
   const photo = src("components/landing/photo.tsx");
   const block = photo.match(/export const LANDING_PHOTOS = \{([\s\S]*?)\} as const;/)[1];
   const entries = [...block.matchAll(/(\w+): \[([\d, ]+)\]/g)];
-  // Only images with cleared rights are listed (see LANDING_IMAGES.md).
-  assert.deepEqual(entries.map((e) => e[1]), ["wall"]);
+  // Exactly the images documented in LANDING_IMAGES.md (the licensing test checks
+  // their documented status).
+  assert.deepEqual(
+    entries.map((e) => e[1]),
+    ["wall", "desk", "forensic", "notebook", "corkboard", "fingerprints", "lampboard"],
+  );
   for (const [, name, widths] of entries) {
-    for (const w of widths.split(",").map((s) => s.trim())) {
+    const list = widths.split(",").map((s) => Number(s.trim()));
+    // Largest first: photoSrc() uses the last (smallest) width as the plain src fallback.
+    assert.deepEqual(list, [...list].sort((a, b) => b - a), `${name} widths are not descending`);
+    for (const w of list) {
       assert.ok(existsSync(join(ROOT, "public", "images", "landing", `${name}-${w}.webp`)), `${name}-${w}.webp`);
     }
   }
@@ -199,7 +206,15 @@ test("backgrounds are decorative and lazy; framed photos have alt text", () => {
   assert.match(photo, /loading=\{priority \? "eager" : "lazy"\}/);
   assert.match(photo, /object-cover/);
   const page = src("app/page.tsx");
-  for (const m of page.matchAll(/<FramedPhoto[\s\S]*?\/>/g)) assert.match(m[0], /alt="Illustrative photograph: [^"]{10,}"/);
+  const framed = [...page.matchAll(/<FramedPhoto[\s\S]*?\/>/g)].map((m) => m[0]);
+  assert.equal(framed.length, 2, "notebook and fingerprints are framed");
+  for (const f of framed) assert.match(f, /alt="Illustrative photograph: [^"]{10,}"/);
+  // Backgrounds never carry alt text of their own (decorative, aria-hidden wrapper).
+  for (const m of page.matchAll(/<SectionPhoto[\s\S]*?\/>/g)) assert.doesNotMatch(m[0], /\balt=/);
+  // Every photograph sits on CSS artwork that shows if the file is missing.
+  for (const m of [...page.matchAll(/<(?:SectionPhoto|FramedPhoto)[\s\S]*?\/>/g)]) {
+    if (!/name="wall"/.test(m[0])) assert.match(m[0], /fallback="\w+"/, m[0].slice(0, 60));
+  }
   // Each photograph appears once on the page.
   const names = [...page.matchAll(/name="(\w+)"/g)].map((m) => m[1]);
   assert.equal(new Set(names).size, names.length, names.join(","));
@@ -269,10 +284,15 @@ test("the hero photo stays whole and the opaque, elevated panel sits in front of
   const page = src("app/page.tsx");
   assert.match(page, /className="relative z-10 min-w-0" data-testid="hero-copy"/);
   assert.match(page, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1\.1fr\)\] lg:gap-16/);
-  // The hero backdrop is CSS artwork (the unverified desk photograph was removed),
-  // drawn behind the panel and never masked.
-  const desk = page.match(/<SectionBackdrop\s+art="desk"[\s\S]*?\/>/)[0];
-  assert.doesNotMatch(desk, /mask/i);
+  // The hero backdrop is the desk photograph, drawn behind the panel, never masked,
+  // loaded eagerly (it is above the fold), on the CSS desk artwork as its fallback.
+  const desk = page.match(/<SectionPhoto\s+name="desk"[\s\S]*?\/>/)[0];
+  assert.doesNotMatch(desk, /mask|imgClassName/i);
+  assert.match(desk, /\bpriority\b/);
+  assert.match(desk, /fallback="desk"/);
+  // The fallback layer is drawn first; the photo is positioned so it paints above it.
+  const photo = src("components/landing/photo.tsx");
+  assert.ok(photo.indexOf("data-photo-fallback") < photo.indexOf('className={clsx("evx-photo relative'));
   const css = src("app/globals.css");
   const art = css.match(/\.evx-art-desk \{[^}]*\}/)[0];
   assert.doesNotMatch(art, /mask|url\(/); // gradients only, no image files

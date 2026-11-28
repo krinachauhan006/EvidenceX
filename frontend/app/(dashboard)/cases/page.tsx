@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import {
   AlertTriangle,
   ArrowRight,
   ClipboardCheck,
+  FlaskConical,
   FolderKanban,
   Loader2,
   Plus,
@@ -14,7 +16,7 @@ import {
   Waypoints,
   X,
 } from "lucide-react";
-import { listCases } from "@/lib/api/cases";
+import { getDemoCase, listCases, loadDemoCase } from "@/lib/api/cases";
 import { workspaceSummary } from "@/lib/api/phase2";
 import type { Case, CaseStatus } from "@/lib/types/case";
 import { formatDateTime } from "@/lib/format";
@@ -24,7 +26,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { FileTypeIcon } from "@/components/evidence/file-type-icon";
 import { Badge, BUTTON_SOLID, Card, EmptyState, ErrorState, INPUT, Skeleton } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { useApi } from "@/hooks/use-api";
+import { errorText, useApi } from "@/hooks/use-api";
 
 const PAGE_SIZE = 24;
 
@@ -231,6 +233,7 @@ export default function CasesPage() {
         </section>
 
         <aside className="space-y-4">
+          <DemoCard />
           <Card className="p-4">
             <p className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
               <Loader2 className={clsx("h-4 w-4", active.length ? "animate-spin text-sky-300" : "text-slate-600")} aria-hidden />
@@ -291,6 +294,59 @@ export default function CasesPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+/**
+ * Optional, fictional demonstration case. Loading it creates the user's OWN copy
+ * (owned by them, private like any case); loading again opens the same copy.
+ */
+function DemoCard() {
+  const router = useRouter();
+  const notify = useToast();
+  const existing = useApi((signal) => getDemoCase(signal), []);
+  const [busy, setBusy] = useState(false);
+  const caseId = existing.data?.case_id ?? null;
+
+  async function open() {
+    setBusy(true);
+    try {
+      const res = await loadDemoCase();
+      const waiting = res.awaiting_worker;
+      notify(
+        "success",
+        res.status === "created" ? "Demo investigation loaded" : "Opening your demo investigation",
+        waiting > 0
+          ? `${waiting} file${waiting === 1 ? "" : "s"} (image, audio, video) ${waiting === 1 ? "is" : "are"} waiting for the processing worker.`
+          : "Fictional demonstration data.",
+      );
+      router.push(`/cases/${res.case_id}`);
+    } catch (err) {
+      notify("error", "The demo investigation could not be loaded", errorText(err, "Please try again."));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="border-sky-500/20 p-4" data-testid="demo-card">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
+          <FlaskConical className="h-4 w-4 text-sky-300" aria-hidden /> Explore Demo Investigation
+        </p>
+        <Badge tone="amber">Fictional demo data</Badge>
+      </div>
+      <p className="mt-2 text-xs text-slate-400">
+        Open a preloaded fictional investigation to explore how EvidenceX organizes evidence, extracts
+        information and identifies possible inconsistencies.
+      </p>
+      <p className="mt-1.5 text-xs text-slate-500">
+        A private copy is created for your account. It is not a real investigation.
+      </p>
+      <button type="button" className={`${BUTTON_SOLID} mt-3 w-full justify-center text-xs`} onClick={() => void open()} disabled={busy}>
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ArrowRight className="h-3.5 w-3.5" aria-hidden />}
+        {busy ? "Loading…" : caseId ? "Open demo investigation" : "Load demo case"}
+      </button>
+    </Card>
   );
 }
 

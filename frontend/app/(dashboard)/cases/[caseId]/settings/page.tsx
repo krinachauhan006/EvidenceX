@@ -244,15 +244,23 @@ function OcrCard() {
     <Card className="p-5">
       <div className="flex items-center gap-2">
         <Languages className="h-4 w-4 text-sky-300" aria-hidden />
-        <h3 className="font-medium text-slate-100">OCR languages on this server</h3>
+        <h3 className="font-medium text-slate-100">
+          {langs.data && !langs.data.engine_available ? "OCR languages" : "OCR languages on this server"}
+        </h3>
       </div>
       {langs.loading && !langs.data && <Skeleton rows={1} className="mt-3" />}
       {langs.error && <ErrorState message={langs.error} />}
-      {langs.data && (
+      {langs.data && !langs.data.engine_available && (
+        // This server has no OCR engine (e.g. a serverless deployment): OCR for images
+        // and scanned PDFs is done by the separate local processing worker, whose
+        // installed languages this server cannot list.
+        <p className="mt-2 text-xs text-slate-500">
+          OCR for images and scanned PDFs is handled by the local processing worker, using the
+          language data installed on that computer.
+        </p>
+      )}
+      {langs.data && langs.data.engine_available && (
         <>
-          {!langs.data.engine_available && (
-            <p className="mt-2 text-xs text-failed">Tesseract OCR was not found on this server.</p>
-          )}
           <div className="mt-3 flex flex-wrap gap-1.5">
             {langs.data.installed.map((l) => (
               <Badge key={l.code} tone={l.usable_for_text ? "blue" : "neutral"} title={l.code}>
