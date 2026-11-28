@@ -15,6 +15,8 @@ import { evidenceDownloadUrl } from "@/lib/api/evidence";
 import { formatBytes, formatDateTime } from "@/lib/format";
 import type { Evidence } from "@/lib/types/evidence";
 import type { ProcessingItem } from "@/lib/types/processing";
+import type { Progress } from "@/lib/browser-processing/run";
+import { BrowserProcessPanel } from "@/components/evidence/browser-process-panel";
 import { ExtractionViewer } from "@/components/evidence/extraction-viewer";
 import { FileTypeIcon } from "@/components/evidence/file-type-icon";
 import {
@@ -43,6 +45,14 @@ interface Props {
   onAskDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
+  /** In-browser processing of THIS row in this tab (null when not running here). */
+  browserProgress?: Progress | null;
+  /** Another row is being processed in this tab (one file at a time). */
+  browserBusy?: boolean;
+  /** The last in-browser attempt's error for this row, if any. */
+  browserError?: string | null;
+  onProcessInBrowser?: (force: boolean) => void;
+  onCancelBrowser?: () => void;
 }
 
 const ACTION_BUTTON =
@@ -63,6 +73,11 @@ export function EvidenceRow({
   onAskDelete,
   onCancelDelete,
   onConfirmDelete,
+  browserProgress = null,
+  browserBusy = false,
+  browserError = null,
+  onProcessInBrowser,
+  onCancelBrowser,
 }: Props) {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [confirmingReprocess, setConfirmingReprocess] = useState(false);
@@ -77,7 +92,18 @@ export function EvidenceRow({
   const busy = status === "processing" || queued || actionBusy;
   // This server leaves the file type to the separate processing worker.
   const external = item?.external_worker === true;
-  const waitingForWorker = awaitingWorker(status, external, errorCode);
+  // ...and an editor's browser may process it instead (lib/browser-processing).
+  const browser = (item?.browser_processing ?? e.browser_processing) === true && Boolean(onProcessInBrowser);
+  const inBrowser = browserProgress !== null;
+  const reclaimable = item?.browser_reclaimable === true;
+  const waitingForWorker = awaitingWorker(status, external, errorCode) && !browser;
+  const canProcessInBrowser =
+    browser &&
+    !inBrowser &&
+    !browserBusy &&
+    !actionBusy &&
+    (status === "pending" || status === "failed" || (status === "processing" && reclaimable));
+  const canReprocessInBrowser = browser && !inBrowser && !browserBusy && status === "completed";
 
   // Process/retry/re-process would only be refused for external file types, so the
   // buttons are not offered; the worker handles those items.
@@ -103,6 +129,8 @@ export function EvidenceRow({
                 queued={queued}
                 extractorAvailable={extractorAvailable}
                 awaitingWorker={waitingForWorker}
+                inBrowser={inBrowser}
+                stalled={status === "processing" && reclaimable && !inBrowser}
               />
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
@@ -124,6 +152,31 @@ export function EvidenceRow({
             <button type="button" onClick={onProcess} className={ACTION_BUTTON}>
               <Play className="h-3.5 w-3.5" aria-hidden />
               Process
+            </button>
+          )}
+          {canProcessInBrowser && (
+            <button
+              type="button"
+              onClick={() => onProcessInBrowser?.(false)}
+              className={ACTION_BUTTON}
+              title="Run OCR or speech recognition on this device; only the extracted text is sent back"
+            >
+              {status === "pending" ? (
+                <Play className="h-3.5 w-3.5" aria-hidden />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              )}
+              {status === "pending" ? "Process in this browser" : "Process again in this browser"}
+            </button>
+          )}
+          {canReprocessInBrowser && (
+            <button
+              type="button"
+              onClick={() => setConfirmingReprocess(true)}
+              className={ACTION_BUTTON}
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              Re-process in browser
             </button>
           )}
           {canRetry && (
@@ -192,7 +245,38 @@ export function EvidenceRow({
         </div>
       )}
 
-      {status === "failed" && !waitingForWorker && (
+      {browserProgress && onCancelBrowser && (
+        <BrowserProcessPanel progress={browserProgress} onCancel={onCancelBrowser} />
+      )}
+
+      {browser && !inBrowser && status === "pending" && !browserError && (
+        <div className="mt-2 rounded-md border border-navy-700 bg-navy-900 px-3 py-2">
+          <p className="text-xs text-slate-400">
+            This server does not run OCR, speech or video engines. Process the file in this
+            browser (the engine is downloaded once and cached), or wait for a processing worker
+            if one is running.
+          </p>
+        </div>
+      )}
+
+      {browser && !inBrowser && status === "processing" && (
+        <div role="status" className="mt-2 rounded-md border border-navy-700 bg-navy-900 px-3 py-2">
+          <p className="text-xs text-slate-400">
+            {reclaimable
+              ? "Processing started elsewhere (another tab or device) but has stopped reporting. It was probably closed; you can process the file again in this browser."
+              : "Being processed elsewhere (another tab, device or the processing worker)."}
+          </p>
+        </div>
+      )}
+
+      {browserError && !inBrowser && (
+        <div role="alert" className="mt-2 rounded-md border border-failed/30 bg-failed/10 px-3 py-2">
+          <p className="text-xs font-medium text-failed">In-browser processing did not finish</p>
+          <p className="mt-0.5 break-words text-xs text-slate-300">{browserError}</p>
+        </div>
+      )}
+
+      {status === "failed" && !waitingForWorker && !browserError && (
         <div role="alert" className="mt-2 rounded-md border border-failed/30 bg-failed/10 px-3 py-2">
           <p className="text-xs font-medium text-failed">
             Processing failed
@@ -226,7 +310,8 @@ export function EvidenceRow({
               type="button"
               onClick={() => {
                 setConfirmingReprocess(false);
-                onReprocess();
+                if (browser) onProcessInBrowser?.(true);
+                else onReprocess();
               }}
               className="rounded-md bg-navy-700 px-3 py-1.5 text-xs font-medium text-slate-100 hover:bg-navy-600"
             >

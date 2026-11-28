@@ -207,6 +207,15 @@ export function EvidenceWorkspace({ evidenceId }: { evidenceId: string }) {
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Processing… this page updates when the
               extraction is ready.
             </span>
+          ) : e.browser_processing ? (
+            <span className="text-unresolved">
+              This file type (OCR, speech or video) is not processed by this server. Use{" "}
+              <strong>Process in this browser</strong> in the{" "}
+              <Link href={`/cases/${caseId}/evidence`} className="underline underline-offset-2 hover:text-slate-100">
+                case&apos;s evidence list
+              </Link>
+              , or wait for a processing worker if one is running.
+            </span>
           ) : awaitingWorker(e.processing_status, e.external_worker, e.processing_error_code) ? (
             <span className="text-unresolved">
               Waiting for the processing worker. This file type (OCR, speech or video) is processed

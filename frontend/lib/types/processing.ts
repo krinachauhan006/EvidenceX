@@ -206,6 +206,10 @@ export interface ProcessingItem {
   // True when the server leaves this file type to the external processing worker.
   // Optional so an older backend (without the field) is treated as "no".
   external_worker?: boolean;
+  // True when an editor's browser may process the item (lib/browser-processing).
+  browser_processing?: boolean;
+  // "processing", but its claim sent no heartbeat for the stale time (a closed tab).
+  browser_reclaimable?: boolean;
 }
 
 export interface StatusCounts {

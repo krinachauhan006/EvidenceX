@@ -8,6 +8,18 @@ bucket as the deployed site. Users keep using the website; the worker only proce
 It is not a second API server and there is no separate queue. Nothing is uploaded to
 the computer from the website; the worker reads the stored files from the bucket.
 
+**The worker is optional.** With `BROWSER_PROCESSING=true` (the default), an editor can
+instead click *Process in this browser*: the OCR or speech engine then runs in their
+browser tab and the server validates and saves the result (see "Processing in your
+browser" in [FEATURES.md](FEATURES.md#26-the-current-deployment-and-the-processing-worker)).
+Both paths use the same atomic claim, so a browser and the worker never process the
+same item at once. The worker also picks up items whose in-browser attempt failed
+(`browser_engine_failed`, `browser_decode_failed`, `browser_out_of_memory`,
+`interrupted`), and an abandoned browser claim after `PROCESSING_STALE_MINUTES`.
+Keep `--heartbeat-seconds` at most half of `BROWSER_PROCESSING_STALE_SECONDS`
+(default 300 s); the worker refuses to start otherwise, so no browser can take over an
+item the worker is still processing.
+
 ## How it works
 
 ```

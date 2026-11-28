@@ -138,3 +138,7 @@ pnpm-debug.log*
 # Benchmark temporary data
 benchmark-results/**/tmp/
 benchmark-results/**/temp/
+
+# In-browser OCR/speech engine files, copied from node_modules before `next dev` and
+# `next build` (frontend/scripts/copy-browser-engines.mjs).
+frontend/public/engines/

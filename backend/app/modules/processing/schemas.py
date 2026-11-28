@@ -148,6 +148,11 @@ class ProcessingItemOut(BaseModel):
     extractor_available: bool
     # True when this server leaves the file type to the external processing worker.
     external_worker: bool = False
+    # True when an editor's browser may process the item instead (browser_service.py).
+    browser_processing: bool = False
+    # True while the item is "processing" but its claim sent no heartbeat for
+    # BROWSER_PROCESSING_STALE_SECONDS (a closed tab): a browser may take it over.
+    browser_reclaimable: bool = False
 
 
 class StatusCounts(BaseModel):

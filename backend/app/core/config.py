@@ -189,6 +189,18 @@ class Settings(BaseSettings):
     # skip reason "external_worker". Empty (default) = this server processes everything.
     external_worker_mimes_raw: str = Field(default="", alias="EXTERNAL_WORKER_MIMES")
 
+    # --- In-browser processing (app/modules/processing/browser_service.py) ----------
+    # For images, audio and video left to the external worker (EXTERNAL_WORKER_MIMES),
+    # an editor's browser may run the OCR / speech engine itself and submit the
+    # result, which this server validates before saving. False = worker only.
+    browser_processing_enabled: bool = Field(default=True, alias="BROWSER_PROCESSING")
+    # A browser claim that sent no heartbeat for this long (tab closed, device asleep)
+    # may be taken over by another browser. Browsers beat every 20 s and the worker
+    # every 60 s, so this never takes an item from a live worker or tab.
+    browser_processing_stale_seconds: int = Field(
+        default=300, ge=60, alias="BROWSER_PROCESSING_STALE_SECONDS"
+    )
+
     @field_validator("external_worker_mimes_raw", mode="before")
     @classmethod
     def _normalise_worker_mimes(cls, value: object) -> object:

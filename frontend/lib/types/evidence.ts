@@ -22,6 +22,8 @@ export interface Evidence {
   // True when the server leaves this file type to the external processing worker.
   // Optional so an older backend (without the field) is treated as "no".
   external_worker?: boolean;
+  // True when an editor's browser may run the OCR / speech engine for this item.
+  browser_processing?: boolean;
 }
 
 export interface EvidenceList {

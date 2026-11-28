@@ -14,6 +14,7 @@ import { processEvidence, processPending, retryEvidence } from "@/lib/api/proces
 import type { Evidence } from "@/lib/types/evidence";
 import type { ProcessAccepted, ProcessingItem } from "@/lib/types/processing";
 import { useProcessingPoll } from "@/hooks/use-processing-poll";
+import { useBrowserProcessing } from "@/hooks/use-browser-processing";
 import { EvidenceRow } from "@/components/evidence/evidence-row";
 import { FileTypeIcon } from "@/components/evidence/file-type-icon";
 import { skipReasonText } from "@/components/evidence/processing-labels";
@@ -106,6 +107,13 @@ export function EvidenceSection({ caseId }: { caseId: string }) {
     markQueued,
     refresh: refreshProcessing,
   } = useProcessingPoll(caseId, { onSettled: handleSettled });
+
+  // In-browser processing (one file at a time). After every attempt the server's status
+  // is reloaded: a row shows "Completed" only once the server has saved the run.
+  const browserJobs = useBrowserProcessing(caseId, (id) => {
+    void refreshProcessing();
+    handleSettled([id]);
+  });
 
   const itemsById = useMemo(() => {
     const map = new Map<string, ProcessingItem>();
@@ -429,6 +437,11 @@ export function EvidenceSection({ caseId }: { caseId: string }) {
                 onAskDelete={() => setConfirmId(e.id)}
                 onCancelDelete={() => setConfirmId(null)}
                 onConfirmDelete={() => void handleDelete(e.id)}
+                browserProgress={browserJobs.job?.evidenceId === e.id ? browserJobs.job.progress : null}
+                browserBusy={browserJobs.job !== null && browserJobs.job.evidenceId !== e.id}
+                browserError={browserJobs.errors[e.id] ?? null}
+                onProcessInBrowser={(force) => browserJobs.start(e, force)}
+                onCancelBrowser={browserJobs.cancel}
               />
             ))}
           </ul>

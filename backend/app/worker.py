@@ -65,6 +65,9 @@ from app.core.db_types import as_utc, utcnow
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.logging import get_logger
 from app.modules.processing.errors import (
+    BROWSER_DECODE_FAILED,
+    BROWSER_ENGINE_FAILED,
+    BROWSER_OUT_OF_MEMORY,
     DEPENDENCY_MISSING,
     INTERRUPTED,
     DependencyMissingError,
@@ -88,10 +91,22 @@ SessionFactory = Callable[[], AbstractContextManager[Session]]
 DEFAULT_WORKER_MIMES = frozenset((*IMAGE_MIMES, *AUDIO_MIMES, *VIDEO_MIMES))
 PDF_MIME = "application/pdf"
 DEFAULT_LOCK_FILE = Path(tempfile.gettempdir()) / "evidencex-processing-worker.lock"
-# Failure codes the worker retries on its own: the file was never judged.
-RECOVERABLE_CODES = frozenset({DEPENDENCY_MISSING, INTERRUPTED})
+# Failure codes the worker retries on its own: the file was never judged. A browser
+# that could not run its engine or decode the file says nothing about the file either.
+BROWSER_FAILURE_CODES = frozenset(
+    {BROWSER_ENGINE_FAILED, BROWSER_DECODE_FAILED, BROWSER_OUT_OF_MEMORY}
+)
+RECOVERABLE_CODES = frozenset({DEPENDENCY_MISSING, INTERRUPTED, *BROWSER_FAILURE_CODES})
 
-Reason = Literal["pending", "dependency_missing", "interrupted", "failed", "stale", "scanned_pdf"]
+Reason = Literal[
+    "pending",
+    "dependency_missing",
+    "interrupted",
+    "browser_failed",
+    "failed",
+    "stale",
+    "scanned_pdf",
+]
 
 
 def worker_mime_types(settings: Settings) -> frozenset[str]:
@@ -206,6 +221,8 @@ def find_candidates(
                     reason = "dependency_missing"
                 elif ev.processing_error_code == INTERRUPTED:
                     reason = "interrupted"
+                elif ev.processing_error_code in BROWSER_FAILURE_CODES:
+                    reason = "browser_failed"
                 elif retry_failed:
                     reason = "failed"
                 else:

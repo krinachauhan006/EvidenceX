@@ -24,6 +24,14 @@ MODEL_INIT_FAILED = "model_init_failed"  # any other failure while starting the 
 # The engine process was stopped from outside (Ctrl+C, console closed, shutdown). The
 # file itself is fine; the item can simply be processed again.
 INTERRUPTED = "interrupted"
+# In-browser processing (browser_service.py). None of these is a verdict on the file:
+# they describe the device or browser that tried, so the item can be processed again
+# (in another browser, or by a processing worker).
+BROWSER_ENGINE_FAILED = "browser_engine_failed"  # the OCR/speech engine could not run
+BROWSER_DECODE_FAILED = "browser_decode_failed"  # this browser could not decode the file
+BROWSER_OUT_OF_MEMORY = "browser_out_of_memory"
+# The server refused the submitted result (out-of-range locators, wrong file, ...).
+BROWSER_RESULT_REJECTED = "browser_result_rejected"
 
 # Longest error message stored; keeps one bad file from bloating the table.
 MAX_ERROR_MESSAGE_CHARS = 1000

@@ -134,6 +134,15 @@ def _worker_refusal(settings, heartbeat_seconds: float, allow_local_storage: boo
             f"PROCESSING_STALE_MINUTES={settings.processing_stale_minutes}; use at most "
             f"{stale_seconds / 2:g} seconds."
         )
+    # A browser may take over an item whose claim sent no heartbeat for
+    # BROWSER_PROCESSING_STALE_SECONDS (set the same value as the deployment's).
+    browser_stale = settings.browser_processing_stale_seconds
+    if heartbeat_seconds * 2 > browser_stale:
+        return (
+            f"--heartbeat-seconds {heartbeat_seconds:g} is too long for "
+            f"BROWSER_PROCESSING_STALE_SECONDS={browser_stale}; use at most "
+            f"{browser_stale / 2:g} seconds."
+        )
     return None
 
 

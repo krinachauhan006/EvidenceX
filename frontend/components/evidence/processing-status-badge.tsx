@@ -13,6 +13,10 @@ interface Props {
   extractorAvailable: boolean | null;
   /** Waiting for the separate processing worker (not a failure). */
   awaitingWorker?: boolean;
+  /** Being processed in THIS browser tab right now. */
+  inBrowser?: boolean;
+  /** "processing" elsewhere, but its claim stopped reporting (probably a closed tab). */
+  stalled?: boolean;
 }
 
 type Tone = "neutral" | "muted" | "success" | "failed";
@@ -31,7 +35,23 @@ interface View {
   title: string;
 }
 
-function view({ status, outcome, queued, extractorAvailable, awaitingWorker }: Props): View {
+function view({ status, outcome, queued, extractorAvailable, awaitingWorker, inBrowser, stalled }: Props): View {
+  if (inBrowser) {
+    return {
+      label: "Processing in this browser",
+      tone: "neutral",
+      icon: "spinner",
+      title: "The engine is running on this device. Keep the tab open until it finishes.",
+    };
+  }
+  if (stalled) {
+    return {
+      label: "Stalled",
+      tone: "neutral",
+      icon: "clock",
+      title: "Processing started elsewhere but stopped reporting; it can be processed again.",
+    };
+  }
   if (status === "processing") {
     return { label: "Processing", tone: "neutral", icon: "spinner", title: "Extraction is running." };
   }
@@ -86,7 +106,7 @@ function view({ status, outcome, queued, extractorAvailable, awaitingWorker }: P
 export function ProcessingStatusBadge(props: Props) {
   const v = view(props);
   const showPartial =
-    props.status === "completed" && !props.queued && props.outcome === "partial";
+    props.status === "completed" && !props.queued && !props.inBrowser && props.outcome === "partial";
 
   return (
     <span className="inline-flex items-center gap-1.5">

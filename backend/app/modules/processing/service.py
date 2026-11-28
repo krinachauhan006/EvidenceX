@@ -19,6 +19,7 @@ from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.modules.cases.repository import CaseRepository
 from app.modules.evidence.models import Evidence
 from app.modules.processing.audio_models import available_model_names, list_local_models
+from app.modules.processing.browser_service import browser_processable
 from app.modules.processing.registry import ExtractorRegistry
 from app.modules.processing.repository import ProcessingRepository
 from app.modules.processing.schemas import (
@@ -290,6 +291,7 @@ class ProcessingService:
         items: list[ProcessingItemOut] = []
         for evidence, current in self._repo.case_overview(case_id):
             counts.total += 1
+            browser = browser_processable(evidence.mime_type, self._settings)
             status_name = evidence.processing_status
             setattr(counts, status_name, getattr(counts, status_name) + 1)
             items.append(
@@ -305,6 +307,15 @@ class ProcessingService:
                     run_number=current.run_number if current else None,
                     extractor_available=self._registry.supports(evidence.mime_type),
                     external_worker=self.is_external(evidence),
+                    browser_processing=browser,
+                    browser_reclaimable=browser and self._stale_for_browser(evidence),
                 )
             )
         return CaseProcessingSummary(counts=counts, items=items)
+
+    def _stale_for_browser(self, evidence: Evidence) -> bool:
+        if evidence.processing_status != "processing":
+            return False
+        started = evidence.processing_started_at
+        cutoff = utcnow() - timedelta(seconds=self._settings.browser_processing_stale_seconds)
+        return started is None or as_utc(started) < cutoff

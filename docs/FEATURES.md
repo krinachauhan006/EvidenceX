@@ -996,10 +996,10 @@ They have not been tested against the live Gemini service.
 | Spreadsheet (CSV, XLSX) and e-mail (EML) extraction | Website |
 | Analysis, claims, entities, events, timeline, inconsistencies, graph, search, Ask | Website (the worker can also start an analysis) |
 | Reports and graph exports | Website |
-| **Image OCR** | **Worker only** |
+| **Image OCR** | **Your browser** ("Process in this browser") or the worker |
 | **OCR of scanned PDF pages** | **Worker only** |
-| **Audio transcription** | **Worker only** |
-| **Video frames, frame text and soundtrack** | **Worker only** |
+| **Audio transcription** | **Your browser** or the worker |
+| **Video frames, frame text and soundtrack** | **Your browser** (sampled frames, and the soundtrack where the browser can decode it) or the worker |
 | Video frame preview pictures | **Not available** on the website (see section 9) |
 
 ### Why some files show "Awaiting worker"
@@ -1007,17 +1007,69 @@ They have not been tested against the live Gemini service.
 The backend is told which file types the worker handles. For those types (images, audio
 and video), the website does not try to process them, because it would fail. Instead:
 
-- the file stays **Pending**, and its badge reads **Awaiting worker**;
-- a note says "Waiting for the processing worker";
-- the **Process**, **Retry** and **Re-process** buttons are hidden for these files.
+- the file stays **Pending**;
+- the server's own **Process**, **Retry** and **Re-process** buttons are hidden for these
+  files;
+- with in-browser processing on (the default, see below) the file offers **Process in
+  this browser** instead. With `BROWSER_PROCESSING=false` its badge reads **Awaiting
+  worker** and a note says "Waiting for the processing worker".
 
 When the worker is running, it finds these files by itself, processes them, saves the
 results to the same database and storage, and then analyses the affected cases. If the
 worker is not running, these files simply wait. Nothing is lost.
 
-A file of these types that failed earlier because an engine was missing, or because
-processing was interrupted, also shows **Awaiting worker**. The worker retries those by
-itself.
+With in-browser processing off, a file of these types that failed earlier because an
+engine was missing, or because processing was interrupted, also shows **Awaiting
+worker**. The worker retries those by itself. With it on, such a file shows **Failed**
+with the reason and offers **Process again in this browser**.
+
+### Processing in your browser (no worker needed)
+
+For images, audio and video, an editor of the case can click **Process in this browser**
+in the Evidence list. The OCR or speech engine then runs on that computer, inside the
+browser tab:
+
+| File | Engine in the browser | Downloaded once, then cached by the browser |
+|---|---|---|
+| Image | Tesseract.js 7 (English) | about 7 MB, served by the EvidenceX website itself |
+| Audio | Whisper tiny (8-bit) via Transformers.js 4, **English only** (the language is recorded on the run) | about 27 MB runtime from the website plus about 41 MB of model weights from the Hugging Face Hub |
+| Video | Both: sampled frames (one every 10 s or more, at most 61) are read with OCR, and the soundtrack is transcribed when the browser can decode it | both of the above |
+
+What happens, step by step:
+
+1. The browser checks that it can do the work (WebAssembly, Web Workers, a secure
+   connection, and that it can decode this format). If not, it says why and **nothing
+   changes** on the server.
+2. It downloads the stored file and checks its SHA-256 fingerprint against the stored one.
+3. It reserves the file on the server (the status becomes **Processing**). Another tab,
+   another person or the worker cannot process it at the same time.
+4. The engine runs on your computer. The file is not sent anywhere; only the model
+   weights are downloaded. The row shows what is happening (and a percentage where the
+   engine reports one). Keep the tab open.
+5. The extracted text, positions and times are sent to the server, which checks them
+   against the stored file (for example that every box lies inside the image, that a WAV
+   recording's length matches, that times lie within the recording) before saving them.
+6. Only after the server has saved the run does the row read **Completed**.
+
+The saved run is an ordinary extraction run, marked as processed in the browser
+(extractor `browser-tesseract.js`, `browser-whisper` or `browser-video`, and a
+"processed in browser" note). Search, analysis, events, relationships and reports use it
+exactly like a worker's run. As with every run, the confidence values are the engine's
+own estimate of how well it read the text, not a statement that the text is true. Whisper
+in the browser reports no confidence, so transcript segments carry none.
+
+If something goes wrong:
+
+| Situation | What you see | What to do |
+|---|---|---|
+| The browser lacks a required feature | The reason, under the file. Nothing was changed. | Use a current desktop Chrome, Edge or Firefox. |
+| You close or reload the tab while it runs | **Failed: Interrupted before finishing** (the tab reports it as it closes). If that report could not be sent, the file shows **Stalled** after 5 minutes. | Click **Process again in this browser**. |
+| The browser cannot decode the file, or runs out of memory | **Failed** with that reason. The file itself is not judged damaged. | Try another browser or computer, or the worker. |
+| The server refuses the result | **Failed: The browser's result was refused by the server**, with the reason. | Process it again. |
+
+WebGPU is **not** required: both engines run on the processor (WebAssembly). Recordings
+longer than 10 minutes are not processed in a browser; use the worker for those. The
+worker keeps working as before and also retries files whose in-browser attempt failed.
 
 ### What the worker does automatically
 

@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildCsp, securityHeaders } from "../lib/csp.mjs";
+import { MODEL_HOSTS, buildCsp, securityHeaders } from "../lib/csp.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -47,7 +47,22 @@ test("framing, plugins, base and form targets are locked down in every mode", ()
 test("an explicit empty API base (Docker, same origin) adds no other origin", () => {
   const csp = buildCsp({ dev: false, apiBase: "" });
   assert.ok(!csp.includes("http://"), csp);
-  assert.ok(!csp.includes("https://"), csp);
+  // The only other origins are the speech-model hosts, and only for fetching data.
+  const d = directives(csp);
+  for (const [name, values] of Object.entries(d)) {
+    const external = values.filter((v) => v.startsWith("https://"));
+    if (name === "connect-src") assert.deepEqual(external, MODEL_HOSTS);
+    else assert.deepEqual(external, [], name);
+  }
+});
+
+test("in-browser engines may compile WebAssembly but scripts still come only from this site", () => {
+  const d = directives(buildCsp({ dev: false, apiBase: "" }));
+  assert.ok(d["script-src"].includes("'wasm-unsafe-eval'"));
+  assert.ok(!d["script-src"].includes("'unsafe-eval'"));
+  assert.ok(!d["script-src"].some((v) => v.startsWith("https:") || v === "*"));
+  assert.deepEqual(d["worker-src"], ["'self'", "blob:"]);
+  assert.deepEqual(MODEL_HOSTS, ["https://huggingface.co", "https://*.huggingface.co", "https://*.hf.co"]);
 });
 
 test("a separate API origin is allowed only for data, media and frames, as an origin", () => {

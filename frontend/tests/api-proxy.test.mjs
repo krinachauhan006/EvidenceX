@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { apiProxyRewrites, proxyOrigin } from "../lib/api-proxy.mjs";
-import { buildCsp } from "../lib/csp.mjs";
+import { MODEL_HOSTS, buildCsp } from "../lib/csp.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = (p) => readFileSync(join(ROOT, p), "utf8");
@@ -43,7 +43,10 @@ test("next.config uses the proxy and a same-origin CSP when the backend origin i
   assert.match(cfg, /async rewrites\(\)\s*\{\s*return apiProxyRewrites\(apiOrigin\);/);
   assert.match(cfg, /apiBase: apiOrigin \? "" : process\.env\.NEXT_PUBLIC_API_BASE_URL/);
   // Same-origin policy: neither localhost nor the backend origin appears in the CSP.
-  const csp = buildCsp({ dev: false, apiBase: "" });
+  // (The speech-model hosts are the only other origins, for data only; see
+  // security-headers.test.mjs.)
+  let csp = buildCsp({ dev: false, apiBase: "" });
+  for (const host of MODEL_HOSTS) csp = csp.replace(` ${host}`, "");
   assert.ok(!csp.includes("localhost") && !csp.includes("http://") && !csp.includes("https://"), csp);
   // The backend origin stays server-side: it is not a NEXT_PUBLIC_ variable.
   assert.doesNotMatch(cfg, /NEXT_PUBLIC_EVIDENCEX_API_ORIGIN/);

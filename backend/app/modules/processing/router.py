@@ -12,7 +12,16 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import get_db
+from app.modules.processing.browser_schemas import (
+    BrowserClaimIn,
+    BrowserClaimOut,
+    BrowserFailureIn,
+    BrowserHeartbeatIn,
+    BrowserResultIn,
+)
+from app.modules.processing.browser_service import BrowserProcessingService
 from app.modules.processing.registry import ExtractorRegistry, get_registry
 from app.modules.processing.runner import ProcessingRunner, build_default_runner
 from app.modules.processing.schemas import (
@@ -44,6 +53,13 @@ def get_processing_service(
 
 def get_runner() -> ProcessingRunner:
     return build_default_runner()
+
+
+def get_browser_service(db: Session = Depends(get_db)) -> BrowserProcessingService:
+    from app.storage.factory import build_storage
+
+    settings = get_settings()
+    return BrowserProcessingService(db, settings, build_storage(settings))
 
 
 def _schedule(
@@ -123,6 +139,68 @@ def retry_evidence(
     accepted = service.enqueue_retry(case_id, evidence_id)
     _schedule(background_tasks, runner, case_id, accepted, force=False)
     return accepted
+
+
+# --- in-browser processing (browser_service.py) ------------------------------------
+# POST routes, so the case role required is "editor" (app/modules/auth/deps.py).
+
+
+@router.post(
+    "/evidence/{evidence_id}/browser-processing/claim",
+    response_model=BrowserClaimOut,
+)
+def browser_claim(
+    case_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    payload: BrowserClaimIn | None = None,
+    service: BrowserProcessingService = Depends(get_browser_service),
+) -> BrowserClaimOut:
+    return service.claim(case_id, evidence_id, force=payload.force if payload else False)
+
+
+@router.post(
+    "/evidence/{evidence_id}/browser-processing/heartbeat",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def browser_heartbeat(
+    case_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    payload: BrowserHeartbeatIn,
+    service: BrowserProcessingService = Depends(get_browser_service),
+) -> None:
+    service.heartbeat(case_id, evidence_id, payload.run_number)
+
+
+@router.post(
+    "/evidence/{evidence_id}/browser-processing/result",
+    response_model=ProcessingStatusOut,
+)
+def browser_result(
+    case_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    payload: BrowserResultIn,
+    service: BrowserProcessingService = Depends(get_browser_service),
+    processing: ProcessingService = Depends(get_processing_service),
+) -> ProcessingStatusOut:
+    """Validate and save a browser's result. 200 means it is committed; the returned
+    status is read back from the database."""
+    service.submit(case_id, evidence_id, payload)
+    return processing.status(case_id, evidence_id)
+
+
+@router.post(
+    "/evidence/{evidence_id}/browser-processing/failure",
+    response_model=ProcessingStatusOut,
+)
+def browser_failure(
+    case_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    payload: BrowserFailureIn,
+    service: BrowserProcessingService = Depends(get_browser_service),
+    processing: ProcessingService = Depends(get_processing_service),
+) -> ProcessingStatusOut:
+    service.fail(case_id, evidence_id, payload)
+    return processing.status(case_id, evidence_id)
 
 
 # --- read results ---------------------------------------------------------------

@@ -44,6 +44,15 @@ class EvidenceOut(BaseModel):
 
         return self.mime_type in get_settings().external_worker_mimes
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def browser_processing(self) -> bool:
+        """True when an editor's browser may process this item instead of the worker."""
+        from app.core.config import get_settings
+        from app.modules.processing.browser_service import browser_processable
+
+        return browser_processable(self.mime_type, get_settings())
+
 
 class EvidenceList(BaseModel):
     items: list[EvidenceOut]

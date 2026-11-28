@@ -16,10 +16,21 @@ const ERROR_CODE_LABELS: Record<string, string> = {
   resource_exhausted: "Not enough memory",
   model_init_failed: "Speech model failed to start",
   interrupted: "Interrupted before finishing",
+  browser_engine_failed: "The in-browser engine could not run on that device",
+  browser_decode_failed: "That browser could not decode the file",
+  browser_out_of_memory: "The device ran out of memory",
+  browser_result_rejected: "The browser's result was refused by the server",
 };
 
-// Failures that say nothing about the file: the external worker retries these by itself.
-const WORKER_RETRIED_CODES = new Set(["dependency_missing", "interrupted"]);
+// Failures that say nothing about the file: the external worker retries these by itself
+// (app/worker.py RECOVERABLE_CODES).
+const WORKER_RETRIED_CODES = new Set([
+  "dependency_missing",
+  "interrupted",
+  "browser_engine_failed",
+  "browser_decode_failed",
+  "browser_out_of_memory",
+]);
 
 export function errorCodeLabel(code: string | null | undefined): string | null {
   if (!code) return null;
