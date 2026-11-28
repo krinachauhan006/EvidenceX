@@ -57,20 +57,43 @@ It extracts information while preserving source references, organizes relevant s
 
 The investigation follows a traceable processing pipeline:
 
-```mermaid
-flowchart TD
-    A["Upload Evidence"] --> B["File Validation"]
-    B --> C["Secure Evidence Storage"]
-    C --> D["Multimodal Extraction"]
-    D --> E["Source-Linked Segments"]
-    E --> F["Claim Extraction"]
-    F --> G["Entity Linking"]
-    G --> H["Proposed Events"]
-    H --> I["Possible Inconsistency Analysis"]
-    I --> J["Human Review"]
-    J --> K["Reports & Knowledge Graph"]
-    J --> L["Tamper-Evident Audit Trail"]
-```
+flowchart LR
+    U(["Investigator"]) --> FE["Frontend<br/>Next.js 14 · React · TypeScript"]
+
+    FE -->|"REST API"| BE["Backend<br/>FastAPI · Python"]
+
+    BE --> PROC["Evidence Processing<br/>PDF · OCR · Audio · Video<br/>Email · Spreadsheets"]
+
+    BE --> ANA["Analysis Engine<br/>Claims · Entities · Events<br/>Timeline · Contradictions"]
+
+    BE --> AI["Optional AI<br/>Google Gemini"]
+
+    BE --> DB[("Database<br/>SQLite / PostgreSQL")]
+
+    PROC --> ST[("Evidence Storage<br/>Local / S3")]
+
+    ANA --> OUT["Outputs<br/>Reports · Knowledge Graph<br/>JSON · GraphML · Audit Trail"]
+
+    classDef user fill:#7C3AED,stroke:#5B21B6,color:#FFFFFF,stroke-width:2px
+    classDef frontend fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+    classDef backend fill:#CCFBF1,stroke:#0D9488,color:#134E4A,stroke-width:2px
+    classDef processing fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+    classDef analysis fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px
+    classDef ai fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px
+    classDef storage fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+    classDef output fill:#FFEDD5,stroke:#EA580C,color:#7C2D12,stroke-width:2px
+
+    class U user
+    class FE frontend
+    class BE backend
+    class PROC processing
+    class ANA analysis
+    class AI ai
+    class DB,ST storage
+    class OUT output
+
+    linkStyle default stroke:#94A3B8,stroke-width:2px
+
 
 ### The Core Principle: Evidence Provenance
 
