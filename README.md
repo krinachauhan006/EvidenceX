@@ -6,7 +6,7 @@
 
 Instead of examining evidence files individually, investigators can bring different formats together, trace every extracted finding back to its original source, and review relationships between pieces of evidence through a unified workspace.
 
-> **Built for Kiroween 2026 — Frankenstein Category, using the Kiro AI IDE.**
+> **Built for Hackathon 2026, using the Kiro AI IDE.**
 
 ---
 
@@ -55,45 +55,59 @@ It extracts information while preserving source references, organizes relevant s
 
 ## How EvidenceX Works
 
-The investigation follows a traceable processing pipeline:
+EvidenceX follows a **modular monolith architecture with two deployable applications and a separate background processing worker**. The frontend communicates with the FastAPI backend through REST APIs, while the worker handles resource-intensive evidence processing.
 
+```mermaid
 flowchart LR
-    U(["Investigator"]) --> FE["Frontend<br/>Next.js 14 · React · TypeScript"]
+    U(["Investigator"]) --> FE["Frontend<br/>Next.js · React"]
+    FE -->|"REST API"| API["Backend API<br/>FastAPI · Python"]
 
-    FE -->|"REST API"| BE["Backend<br/>FastAPI · Python"]
+    API --> DB[("Database<br/>PostgreSQL / SQLite")]
+    API --> ST[("Evidence Storage<br/>Local / S3")]
 
-    BE --> PROC["Evidence Processing<br/>PDF · OCR · Audio · Video<br/>Email · Spreadsheets"]
+    DB --> W["Processing Worker<br/>OCR · Whisper · Video"]
+    ST <--> W
 
-    BE --> ANA["Analysis Engine<br/>Claims · Entities · Events<br/>Timeline · Contradictions"]
+    API --> AN["Analysis Engine<br/>Claims · Entities · Events"]
+    W --> AN
 
-    BE --> AI["Optional AI<br/>Google Gemini"]
+    AN --> OUT["Investigation Outputs<br/>Timeline · Graph · Reports"]
 
-    BE --> DB[("Database<br/>SQLite / PostgreSQL")]
-
-    PROC --> ST[("Evidence Storage<br/>Local / S3")]
-
-    ANA --> OUT["Outputs<br/>Reports · Knowledge Graph<br/>JSON · GraphML · Audit Trail"]
+    API -.-> AI["Optional Gemini AI"]
 
     classDef user fill:#7C3AED,stroke:#5B21B6,color:#FFFFFF,stroke-width:2px
     classDef frontend fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
     classDef backend fill:#CCFBF1,stroke:#0D9488,color:#134E4A,stroke-width:2px
-    classDef processing fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+    classDef worker fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
     classDef analysis fill:#FCE7F3,stroke:#DB2777,color:#831843,stroke-width:2px
-    classDef ai fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px
     classDef storage fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
     classDef output fill:#FFEDD5,stroke:#EA580C,color:#7C2D12,stroke-width:2px
+    classDef ai fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px
 
     class U user
     class FE frontend
-    class BE backend
-    class PROC processing
-    class ANA analysis
-    class AI ai
+    class API backend
+    class W worker
     class DB,ST storage
+    class AN analysis
     class OUT output
+    class AI ai
+```
 
-    linkStyle default stroke:#94A3B8,stroke-width:2px
+### Architecture Components
 
+| Component | Responsibility |
+|---|---|
+| **Frontend** | Provides the investigation workspace and evidence interface. |
+| **Backend API** | Handles authentication, case management, evidence intake, and application logic. |
+| **Processing Worker** | Performs background OCR, audio transcription, and video processing. |
+| **Database** | Stores investigation records, extracted data, claims, and relationships. |
+| **Evidence Storage** | Stores original uploaded evidence files. |
+| **Analysis Engine** | Organizes claims, entities, events, and potential inconsistencies. |
+| **Optional Gemini AI** | Provides consent-controlled AI-assisted analysis. |
+| **Investigation Outputs** | Presents timelines, knowledge graphs, reports, and audit records. |
+
+**Design principle:** EvidenceX separates evidence storage, background processing, and investigative analysis while preserving traceability between findings and their original sources.
 
 ### The Core Principle: Evidence Provenance
 
