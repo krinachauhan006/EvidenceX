@@ -23,6 +23,7 @@ from app.modules.processing.errors import (
     CorruptFileError,
     DependencyMissingError,
     ExtractionError,
+    ExtractionInterruptedError,
     PasswordRequiredError,
 )
 from app.modules.processing.extractors.base import (
@@ -297,6 +298,10 @@ class PdfExtractor:
                 unresolved.extend(scanned_pages[position:])
                 warnings.append(ExtractionWarning("ocr_unavailable", exc.message))
                 return done, sorted(set(unresolved)), confidences
+            except ExtractionInterruptedError:
+                # Not a page problem: fail the whole run so it can simply be repeated,
+                # instead of saving a run with these pages silently missing.
+                raise
             except ExtractionError as exc:
                 unresolved.append(number)
                 warnings.append(

@@ -33,7 +33,11 @@ import { WORKSPACE_TABS, parseFocus, type WorkspaceTab } from "@/components/anal
 import { methodLabel } from "@/components/analysis/review-labels";
 import { ExtractionViewer } from "@/components/evidence/extraction-viewer";
 import { VideoViewer } from "@/components/workspace/video-viewer";
-import { errorCodeLabel, outcomeLabel } from "@/components/evidence/processing-labels";
+import {
+  awaitingWorker,
+  errorCodeLabel,
+  outcomeLabel,
+} from "@/components/evidence/processing-labels";
 import {
   Badge,
   BUTTON,
@@ -202,6 +206,11 @@ export function EvidenceWorkspace({ evidenceId }: { evidenceId: string }) {
             <span className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Processing… this page updates when the
               extraction is ready.
+            </span>
+          ) : awaitingWorker(e.processing_status, e.external_worker, e.processing_error_code) ? (
+            <span className="text-unresolved">
+              Waiting for the processing worker. This file type (OCR, speech or video) is processed
+              by a separate worker, not by this server; refresh the page to see the result.
             </span>
           ) : e.processing_status === "failed" ? (
             <span className="text-failed">

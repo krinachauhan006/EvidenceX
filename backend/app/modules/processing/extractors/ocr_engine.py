@@ -15,11 +15,23 @@ from typing import Any, Protocol
 
 from app.modules.processing.errors import (
     DependencyMissingError,
+    ExtractionInterruptedError,
     ExtractionTimeoutError,
     UnsupportedContentError,
 )
 
 DEFAULT_WINDOWS_TESSERACT = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+# Exit statuses of a tesseract process that was stopped from outside rather than one
+# that rejected the image: Windows STATUS_CONTROL_C_EXIT (0xC000013A, as reported
+# unsigned and signed; also used when the console closes) and, on POSIX, death by
+# SIGINT or SIGTERM. Ctrl+C in a console reaches every process attached to it,
+# including the tesseract child of an inline OCR run.
+INTERRUPTED_EXIT_STATUSES = frozenset({0xC000013A, 0xC000013A - (1 << 32), -2, -15})
+
+
+def is_interrupted_status(status: Any) -> bool:
+    return isinstance(status, int) and status in INTERRUPTED_EXIT_STATUSES
 
 
 @dataclass
@@ -133,14 +145,20 @@ class TesseractEngine:
             )
         except module.TesseractNotFoundError as exc:
             raise DependencyMissingError(_MISSING_MESSAGE) from exc
-        except RuntimeError as exc:  # pytesseract raises RuntimeError on timeout
-            if "timeout" in str(exc).lower():
-                raise ExtractionTimeoutError("OCR took too long and was stopped.") from exc
-            raise
+        # TesseractError is a RuntimeError subclass, so it must be handled first.
         except module.TesseractError as exc:
+            if is_interrupted_status(getattr(exc, "status", None)):
+                raise ExtractionInterruptedError(
+                    "OCR was interrupted before it finished (for example by Ctrl+C). "
+                    "The file was not judged; process it again."
+                ) from exc
             if "load" in str(exc).lower() and "lang" in str(exc).lower():
                 raise DependencyMissingError(
                     f"Tesseract language data for '{langs}' is missing. Install it or "
                     "change TESSERACT_LANGS."
                 ) from exc
             raise UnsupportedContentError("OCR could not process this image.") from exc
+        except RuntimeError as exc:  # pytesseract raises RuntimeError on timeout
+            if "timeout" in str(exc).lower():
+                raise ExtractionTimeoutError("OCR took too long and was stopped.") from exc
+            raise

@@ -35,6 +35,15 @@ class InlineExecutor:
         return extractor.extract(inp)
 
 
+def _ignore_interrupt() -> None:
+    """Pool initializer: Ctrl+C in the console reaches every attached process. The
+    parent decides how to stop (the processing worker finishes the current item);
+    the child must not be killed half-way by the same keypress."""
+    import signal
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
 def _child(extractor: Extractor, inp: ExtractionInput) -> tuple[str, Any]:
     try:
         return "ok", extractor.extract(inp)
@@ -60,7 +69,7 @@ class SubprocessExecutor:
         if inp.mime_type not in self._mimes:
             return self._inline.run(extractor, inp)
         ctx = mp.get_context("spawn")
-        pool = ctx.Pool(processes=1, maxtasksperchild=1)
+        pool = ctx.Pool(processes=1, maxtasksperchild=1, initializer=_ignore_interrupt)
         try:
             pending = pool.apply_async(_child, (extractor, inp))
             try:

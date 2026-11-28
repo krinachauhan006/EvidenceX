@@ -6,11 +6,15 @@ secrets and never log their values.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# A MIME type as stored on evidence rows: "type/subtype", lower case.
+_MIME_RE = re.compile(r"[a-z0-9][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*")
 
 
 class Settings(BaseSettings):
@@ -176,6 +180,43 @@ class Settings(BaseSettings):
     processing_item_timeout_seconds: int = Field(
         default=2400, ge=10, alias="PROCESSING_ITEM_TIMEOUT_SECONDS"
     )
+
+    # --- External processing worker -----------------------------------------------
+    # Comma-separated MIME types that THIS server must not process because a separate
+    # worker does (``python -m app.cli worker``, e.g. on a computer with Tesseract, the
+    # speech model and PyAV). Set on a serverless deployment that lacks those engines.
+    # Such items are never claimed here: they stay "pending" and are reported with the
+    # skip reason "external_worker". Empty (default) = this server processes everything.
+    external_worker_mimes_raw: str = Field(default="", alias="EXTERNAL_WORKER_MIMES")
+
+    @field_validator("external_worker_mimes_raw", mode="before")
+    @classmethod
+    def _normalise_worker_mimes(cls, value: object) -> object:
+        """Lower-case, de-duplicated, comma-separated ``type/subtype`` list. A malformed
+        entry is refused at start-up rather than silently ignored (a typo would let the
+        server claim and fail items the worker should process)."""
+        if value is None:
+            return ""
+        if not isinstance(value, str):
+            return value
+        seen: list[str] = []
+        for part in value.replace(";", ",").split(","):
+            mime = part.strip().lower()
+            if not mime:
+                continue
+            if not _MIME_RE.fullmatch(mime):
+                raise ValueError(
+                    f"EXTERNAL_WORKER_MIMES contains an invalid MIME type {mime!r}; "
+                    "use comma-separated values such as image/png,audio/wav"
+                )
+            if mime not in seen:
+                seen.append(mime)
+        return ",".join(seen)
+
+    @property
+    def external_worker_mimes(self) -> frozenset[str]:
+        """MIME types handled by the external worker (empty = none)."""
+        return frozenset(m for m in self.external_worker_mimes_raw.split(",") if m)
 
     @field_validator("database_url", mode="before")
     @classmethod

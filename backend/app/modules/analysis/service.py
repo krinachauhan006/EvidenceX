@@ -389,9 +389,17 @@ class AnalysisService:
     # --- analysis runs ----------------------------------------------------------
 
     def start_run(self, case_id: uuid.UUID, method: str) -> AnalysisRun:
+        """Create the case's running analysis run, unless one is already active.
+
+        The check and the insert run under the case's row lock, so two concurrent
+        callers (the web app and the processing worker, say) cannot both pass the
+        check: the second waits for the first to commit and then gets a conflict."""
         self._require_case(case_id)
+        if not self._repo.lock_case(case_id):
+            raise NotFoundError("case not found")
         since = utcnow() - timedelta(minutes=self._settings.analysis_stale_minutes)
         if self._repo.active_run(case_id, since) is not None:
+            self._db.commit()  # release the case lock (the no-op UPDATE changes nothing)
             raise ConflictError("an analysis of this case is already running")
         run = AnalysisRun(case_id=case_id, status="running", method=method, stats={})
         self._repo.add(run)

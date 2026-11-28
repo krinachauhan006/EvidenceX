@@ -11,6 +11,8 @@ interface Props {
   queued: boolean;
   /** null = not known yet. false = no extractor exists for this file type. */
   extractorAvailable: boolean | null;
+  /** Waiting for the separate processing worker (not a failure). */
+  awaitingWorker?: boolean;
 }
 
 type Tone = "neutral" | "muted" | "success" | "failed";
@@ -29,9 +31,19 @@ interface View {
   title: string;
 }
 
-function view({ status, outcome, queued, extractorAvailable }: Props): View {
+function view({ status, outcome, queued, extractorAvailable, awaitingWorker }: Props): View {
   if (status === "processing") {
     return { label: "Processing", tone: "neutral", icon: "spinner", title: "Extraction is running." };
+  }
+  if (awaitingWorker) {
+    return {
+      label: "Awaiting worker",
+      tone: "neutral",
+      icon: "clock",
+      title:
+        "This file type is processed by a separate processing worker. It is picked up " +
+        "automatically; refresh the page to see the result.",
+    };
   }
   if (queued) {
     return { label: "Queued", tone: "neutral", icon: "clock", title: "Waiting for the extraction to start." };

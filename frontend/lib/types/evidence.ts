@@ -19,6 +19,9 @@ export interface Evidence {
   processing_completed_at: string | null;
   processing_attempts: number;
   uploaded_at: string;
+  // True when the server leaves this file type to the external processing worker.
+  // Optional so an older backend (without the field) is treated as "no".
+  external_worker?: boolean;
 }
 
 export interface EvidenceList {

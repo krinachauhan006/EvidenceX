@@ -116,7 +116,11 @@ export function EvidenceSection({ caseId }: { caseId: string }) {
   const processableCount = useMemo(
     () =>
       (summary?.items ?? []).filter(
-        (it) => it.status === "pending" && it.extractor_available && !queuedIds.has(it.evidence_id),
+        (it) =>
+          it.status === "pending" &&
+          it.extractor_available &&
+          !it.external_worker &&
+          !queuedIds.has(it.evidence_id),
       ).length,
     [summary, queuedIds],
   );

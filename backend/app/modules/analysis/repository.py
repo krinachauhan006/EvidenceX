@@ -7,7 +7,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.analysis.models import (
@@ -58,6 +58,37 @@ class AnalysisRepository:
             .limit(1)
             .execution_options(populate_existing=True)
         )
+
+    def lock_case(self, case_id: uuid.UUID) -> bool:
+        """Take the case's row lock for the rest of this transaction (False when the
+        case does not exist).
+
+        A no-op UPDATE (``updated_at`` is set to itself, so ``onupdate`` does not fire
+        and nothing visible changes) is used because it locks on every backend: a row
+        lock on PostgreSQL, the database write lock on SQLite. Two concurrent callers
+        are therefore serialized: the second waits until the first commits and then
+        sees what it wrote."""
+        from app.modules.cases.models import Case
+
+        result = self._db.execute(
+            update(Case)
+            .where(Case.id == case_id)
+            .values(updated_at=Case.updated_at)
+            .execution_options(synchronize_session=False)
+        )
+        return bool(result.rowcount)
+
+    def latest_run_start_by_case(self, case_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, Any]:
+        """case id -> start time of its most recent analysis run (any status)."""
+        ids = list(case_ids)
+        if not ids:
+            return {}
+        rows = self._db.execute(
+            select(AnalysisRun.case_id, func.max(AnalysisRun.started_at))
+            .where(AnalysisRun.case_id.in_(ids))
+            .group_by(AnalysisRun.case_id)
+        ).all()
+        return {case_id: started for case_id, started in rows}
 
     def active_run(self, case_id: uuid.UUID, since: datetime) -> AnalysisRun | None:
         return self._db.scalar(

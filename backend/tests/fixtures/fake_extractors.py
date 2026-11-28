@@ -42,3 +42,52 @@ class FlakyExtractor:
             self._remaining -= 1
             raise self._exc
         return self._delegate.extract(inp)
+
+
+class FakeOcrExtractor:
+    """Succeeds with one OCR-style line, without Tesseract. ``started``/``release``
+    let a test hold the extraction open (to observe the heartbeat) and ``delay``
+    simulates a slow engine."""
+
+    name = "fake-ocr"
+    version = "1"
+
+    def __init__(
+        self,
+        text: str = "Gate log: the truck arrived at 10:34 on 12 October 2026.",
+        *,
+        delay: float = 0.0,
+        started=None,  # noqa: ANN001 - threading.Event | None
+        release=None,  # noqa: ANN001 - threading.Event | None
+    ) -> None:
+        self.text = text
+        self.delay = delay
+        self.started = started
+        self.release = release
+        self.calls = 0
+
+    def extract(self, inp: ExtractionInput) -> ExtractionResult:
+        import time
+
+        from app.modules.processing.extractors.base import SegmentDraft
+        from app.modules.processing.locators import ImageLocator, PdfLocator
+
+        self.calls += 1
+        if self.started is not None:
+            self.started.set()
+        if self.release is not None:
+            self.release.wait(timeout=30)
+        if self.delay:
+            time.sleep(self.delay)
+        if inp.mime_type == "application/pdf":
+            locator = PdfLocator(page=1, bbox=[0, 0, 100, 20], page_width=612, page_height=792)
+            segment_type = "pdf_text_block"
+        else:
+            locator = ImageLocator(bbox=[0, 0, 100, 20], width=200, height=100)
+            segment_type = "ocr_line"
+        return ExtractionResult(
+            self.name,
+            self.version,
+            "ok",
+            [SegmentDraft(segment_type, self.text, locator, engine_confidence=0.9)],
+        )

@@ -76,7 +76,20 @@ class ProcessingService:
             cutoff = utcnow() - timedelta(minutes=self._settings.processing_stale_minutes)
             if started is None or as_utc(started) >= cutoff:
                 return "already_processing"
+            if self.is_external(evidence):
+                # A stale item of an external type belongs to the worker, which
+                # reclaims it; this server must not claim (and then fail) it.
+                return "already_processing"
+        if self.is_external(evidence):
+            # Never queued here, so never claimed or marked failed by this server. The
+            # item keeps its status ("pending", or "failed" from before the setting)
+            # and the external processing worker picks it up.
+            return "external_worker"
         return None
+
+    def is_external(self, evidence: Evidence) -> bool:
+        """Whether this server leaves the item's file type to the external worker."""
+        return evidence.mime_type in self._settings.external_worker_mimes
 
     def _decide(self, evidences: list[Evidence], *, force: bool) -> ProcessAccepted:
         queued: list[uuid.UUID] = []
@@ -291,6 +304,7 @@ class ProcessingService:
                     segment_count=current.segment_count if current else 0,
                     run_number=current.run_number if current else None,
                     extractor_available=self._registry.supports(evidence.mime_type),
+                    external_worker=self.is_external(evidence),
                 )
             )
         return CaseProcessingSummary(counts=counts, items=items)

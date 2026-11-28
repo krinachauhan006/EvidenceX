@@ -13,7 +13,9 @@ from app.modules.processing.locators import Locator
 
 RunStatus = Literal["completed", "failed"]
 Outcome = Literal["ok", "partial", "needs_ocr", "empty"]
-SkipReason = Literal["already_completed", "already_processing", "no_extractor"]
+# "external_worker": this server does not process the file type (EXTERNAL_WORKER_MIMES);
+# a separate processing worker picks the item up. It is not a failure.
+SkipReason = Literal["already_completed", "already_processing", "no_extractor", "external_worker"]
 # "reviewed" once a person has stored a correction (see segment_reviews).
 ReviewStatus = Literal["unreviewed", "reviewed"]
 
@@ -144,6 +146,8 @@ class ProcessingItemOut(BaseModel):
     segment_count: int
     run_number: int | None
     extractor_available: bool
+    # True when this server leaves the file type to the external processing worker.
+    external_worker: bool = False
 
 
 class StatusCounts(BaseModel):

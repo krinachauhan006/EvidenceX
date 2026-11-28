@@ -58,6 +58,12 @@ engine that is not available on this serverless deployment, and it can be proces
 full installation (Docker or local) connected to the same database and storage. Nothing
 crashes and no result is invented.
 
+To process images, audio and video for the deployed site, run the **local processing
+worker** on a computer with those engines and set `EXTERNAL_WORKER_MIMES` on the backend:
+those files then stay **pending** ("Awaiting worker") instead of failing, and the worker
+processes them against the same database and bucket. See
+[PROCESSING_WORKER.md](PROCESSING_WORKER.md).
+
 Larger uploads would need **direct-to-bucket uploads** (presigned URLs, then server-side
 validation). That is a separate, unimplemented enhancement; it is not needed for the demo
 files (all under 0.5 MB).
@@ -135,6 +141,7 @@ From [Supabase S3 authentication](https://supabase.com/docs/guides/storage/s3/au
 | `PROCESSING_STALE_MINUTES`, `ANALYSIS_STALE_MINUTES` | `10` | recommended |
 | `REGISTRATION_OPEN` | `true` until accounts exist, then `false` | recommended |
 | `CLAIM_EXTRACTOR` | `rule_based` | optional |
+| `EXTERNAL_WORKER_MIMES` | image, audio and video MIME types, when a local processing worker handles them (see [PROCESSING_WORKER.md](PROCESSING_WORKER.md)) | optional |
 | `GEMINI_API_KEY` | only if AI is wanted | optional |
 
 `VERCEL=1` is set by Vercel itself and turns on the serverless checks.

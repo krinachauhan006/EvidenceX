@@ -6,7 +6,13 @@ import type { EvidenceType, ProcessingStatus } from "@/lib/types/evidence";
 
 export type RunStatus = "completed" | "failed";
 export type ExtractionOutcome = "ok" | "partial" | "needs_ocr" | "empty";
-export type SkipReason = "already_completed" | "already_processing" | "no_extractor";
+// "external_worker": the server leaves this file type to the separate processing
+// worker (EXTERNAL_WORKER_MIMES). Not a failure; the item stays pending until then.
+export type SkipReason =
+  | "already_completed"
+  | "already_processing"
+  | "no_extractor"
+  | "external_worker";
 
 // --- locators (discriminated on `kind`) ----------------------------------------
 
@@ -197,6 +203,9 @@ export interface ProcessingItem {
   segment_count: number;
   run_number: number | null; // run number of the current run, if any
   extractor_available: boolean;
+  // True when the server leaves this file type to the external processing worker.
+  // Optional so an older backend (without the field) is treated as "no".
+  external_worker?: boolean;
 }
 
 export interface StatusCounts {

@@ -21,6 +21,9 @@ INTERNAL_ERROR = "internal_error"
 MODEL_INVALID = "model_invalid"  # files present but damaged or not a usable model
 RESOURCE_EXHAUSTED = "resource_exhausted"  # out of memory or a similar resource limit
 MODEL_INIT_FAILED = "model_init_failed"  # any other failure while starting the engine
+# The engine process was stopped from outside (Ctrl+C, console closed, shutdown). The
+# file itself is fine; the item can simply be processed again.
+INTERRUPTED = "interrupted"
 
 # Longest error message stored; keeps one bad file from bloating the table.
 MAX_ERROR_MESSAGE_CHARS = 1000
@@ -78,3 +81,10 @@ class ResourceExhaustedError(ExtractionError):
 
 class ModelInitError(ExtractionError):
     code = MODEL_INIT_FAILED
+
+
+class ExtractionInterruptedError(ExtractionError):
+    """An engine subprocess was stopped from outside. Never a verdict on the file:
+    extractors must let it propagate instead of turning it into a per-page warning."""
+
+    code = INTERRUPTED

@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 EvidenceType = Literal["document", "image", "audio", "tabular", "email", "video"]
 ProcessingStatus = Literal["pending", "processing", "completed", "failed"]
@@ -34,6 +34,15 @@ class EvidenceOut(BaseModel):
     processing_attempts: int = 0
     # Exposed under the product-facing name "uploaded_at" (backed by created_at).
     uploaded_at: datetime = Field(validation_alias="created_at")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def external_worker(self) -> bool:
+        """True when this server leaves the file type to the external processing worker
+        (EXTERNAL_WORKER_MIMES), so the UI can say "waiting" instead of "failed"."""
+        from app.core.config import get_settings
+
+        return self.mime_type in get_settings().external_worker_mimes
 
 
 class EvidenceList(BaseModel):

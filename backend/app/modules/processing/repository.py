@@ -1,7 +1,15 @@
 """Data access for processing: claims, run history and segments.
 
 Every read is scoped by ``case_id`` (and ``evidence_id`` where relevant) so one
-case can never see another case's extraction data.
+case can never see another case's extraction data. The exception is the processing
+worker's candidate queries (``list_unfinished_by_mime``, ``list_completed_with_current``,
+``current_runs_by_mime``), which an operator-run process uses across all cases and which
+never reach the API.
+
+Saving a run (``record_success`` / ``record_failure``) is conditional on the claim:
+it only changes anything while the item is still ``processing`` under the same
+attempt number, so an attempt that was reclaimed as stale can never overwrite the
+result or status of the newer attempt.
 """
 
 from __future__ import annotations
@@ -9,7 +17,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator, Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
@@ -26,6 +34,14 @@ SEGMENT_INSERT_BATCH = 1000
 def _batches(items: Sequence, size: int) -> Iterator[Sequence]:
     for start in range(0, len(items), size):
         yield items[start : start + size]
+
+
+class EvidenceRef(Protocol):
+    """What persistence needs to know about the claimed item: an ``Evidence`` row or
+    the runner's detached snapshot of it."""
+
+    id: uuid.UUID
+    case_id: uuid.UUID
 
 
 class ProcessingRepository:
@@ -48,6 +64,86 @@ class ProcessingRepository:
             stmt = stmt.where(Evidence.processing_status == status)
         stmt = stmt.order_by(Evidence.created_at.asc(), Evidence.id.asc())
         return list(self._db.scalars(stmt.execution_options(populate_existing=True)).all())
+
+    # --- processing worker (read-only candidate queries) -------------------------
+
+    def list_unfinished_by_mime(
+        self, mime_types: Sequence[str], *, stale_cutoff: datetime
+    ) -> list[Evidence]:
+        """Across all cases: pending or failed items of these types, and items stuck in
+        ``processing`` since before ``stale_cutoff``. Oldest first. Reads only."""
+        if not mime_types:
+            return []
+        stmt = (
+            select(Evidence)
+            .where(
+                Evidence.mime_type.in_(list(mime_types)),
+                or_(
+                    Evidence.processing_status.in_(("pending", "failed")),
+                    and_(
+                        Evidence.processing_status == "processing",
+                        Evidence.processing_started_at < stale_cutoff,
+                    ),
+                ),
+            )
+            .order_by(Evidence.created_at.asc(), Evidence.id.asc())
+        )
+        return list(self._db.scalars(stmt.execution_options(populate_existing=True)).all())
+
+    def list_completed_with_current(self, mime_type: str) -> list[tuple[Evidence, Extraction]]:
+        """Across all cases: completed items of this type with their current run."""
+        stmt = (
+            select(Evidence, Extraction)
+            .join(
+                Extraction,
+                and_(Extraction.evidence_id == Evidence.id, Extraction.is_current.is_(True)),
+            )
+            .where(Evidence.mime_type == mime_type, Evidence.processing_status == "completed")
+            .order_by(Evidence.created_at.asc(), Evidence.id.asc())
+        )
+        return [(e, x) for e, x in self._db.execute(stmt).all()]
+
+    def current_runs_by_mime(self, mime_types: Sequence[str]) -> list[tuple[Any, ...]]:
+        """Across all cases: (case_id, mime_type, run created_at, run_number, warnings)
+        of the current completed run of every item of these types. Reads only."""
+        if not mime_types:
+            return []
+        stmt = (
+            select(
+                Extraction.case_id,
+                Evidence.mime_type,
+                Extraction.created_at,
+                Extraction.run_number,
+                Extraction.warnings,
+            )
+            .join(Evidence, Evidence.id == Extraction.evidence_id)
+            .where(
+                Evidence.mime_type.in_(list(mime_types)),
+                Extraction.is_current.is_(True),
+                Extraction.run_status == "completed",
+            )
+        )
+        return [tuple(row) for row in self._db.execute(stmt).all()]
+
+    def heartbeat(self, evidence_id: uuid.UUID, run_number: int, *, now: datetime) -> bool:
+        """Refresh ``processing_started_at`` so a long run is not treated as abandoned.
+
+        Only the claim that started run ``run_number`` is refreshed: the row must still
+        be ``processing`` with exactly that attempt count. If the item finished, failed
+        or was reclaimed by someone else (which increments the attempts), nothing is
+        changed and False is returned."""
+        result = self._db.execute(
+            update(Evidence)
+            .where(
+                Evidence.id == evidence_id,
+                Evidence.processing_status == "processing",
+                Evidence.processing_attempts == run_number,
+            )
+            .values(processing_started_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        self._db.commit()
+        return bool(result.rowcount)
 
     # --- claim ------------------------------------------------------------------
 
@@ -92,23 +188,74 @@ class ProcessingRepository:
 
     # --- writing results --------------------------------------------------------
 
+    def _finish_claim(self, evidence: EvidenceRef, run_number: int, values: dict) -> bool:
+        """Set the final evidence state, but only while the item is still
+        ``processing`` under the claim that started run ``run_number``.
+
+        This UPDATE is the first statement of the saving transaction, so on
+        PostgreSQL it also locks the row: a concurrent reclaim or heartbeat waits for
+        this transaction and then re-checks its own conditions. A newer claim (which
+        incremented the attempts) makes it match nothing: the stale attempt then
+        writes nothing at all."""
+        result = self._db.execute(
+            update(Evidence)
+            .where(
+                Evidence.id == evidence.id,
+                Evidence.case_id == evidence.case_id,
+                Evidence.processing_status == "processing",
+                Evidence.processing_attempts == run_number,
+            )
+            .values(**values)
+            .execution_options(synchronize_session="fetch")
+        )
+        return bool(result.rowcount)
+
+    def has_current_extraction(self, evidence_id: uuid.UUID) -> bool:
+        return (
+            self._db.scalar(
+                select(Extraction.id)
+                .where(
+                    Extraction.evidence_id == evidence_id,
+                    Extraction.is_current.is_(True),
+                    Extraction.run_status == "completed",
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
     def record_success(
         self,
-        evidence: Evidence,
+        evidence: EvidenceRef,
         *,
         run_number: int,
         started_at: datetime,
         result: ExtractionResult,
         source_sha256: str,
         duration_ms: int,
-    ) -> Extraction:
+    ) -> Extraction | None:
         """Persist a completed run in ONE transaction.
 
-        The previous current run is demoted, the new run and all its segments are
-        inserted, and the evidence is marked completed. If anything fails, nothing
-        is committed and the previous current run stays current.
+        The evidence is marked completed (only if this run still owns the claim),
+        the previous current run is demoted, and the new run and all its segments are
+        inserted. If anything fails, nothing is committed and the previous current
+        run stays current. Returns None, having written nothing, when the claim was
+        lost (reclaimed by a newer attempt, or the item was deleted).
         """
         now = utcnow()
+        owned = self._finish_claim(
+            evidence,
+            run_number,
+            {
+                "processing_status": "completed",
+                "processing_completed_at": now,
+                "processing_error": None,
+                "processing_error_code": None,
+            },
+        )
+        if not owned:
+            self._db.commit()  # the UPDATE matched nothing; just end the transaction
+            return None
         self._db.execute(
             update(Extraction)
             .where(Extraction.evidence_id == evidence.id, Extraction.is_current.is_(True))
@@ -160,16 +307,12 @@ class ProcessingRepository:
             self._db.add_all(rows)
             self._db.flush()
 
-        evidence.processing_status = "completed"
-        evidence.processing_completed_at = now
-        evidence.processing_error = None
-        evidence.processing_error_code = None
         self._db.commit()
         return extraction
 
     def record_failure(
         self,
-        evidence: Evidence,
+        evidence: EvidenceRef,
         *,
         run_number: int,
         started_at: datetime,
@@ -179,10 +322,31 @@ class ProcessingRepository:
         error_code: str,
         error_message: str,
         duration_ms: int,
-    ) -> Extraction:
-        """Record a failed run and mark the evidence failed. A failed run is never
-        current, so an earlier successful run stays current and readable."""
+        keep_completed: bool = False,
+    ) -> Extraction | None:
+        """Record a failed run. A failed run is never current, so an earlier
+        successful run stays current and readable.
+
+        The evidence is marked failed, except with ``keep_completed`` when it still
+        has a successful current run: then it returns to ``completed`` (the failure
+        is kept in the run history), so an optional re-run that failed does not make
+        good evidence look broken. Returns None, having written nothing, when the
+        claim was lost."""
         now = utcnow()
+        restore = keep_completed and self.has_current_extraction(evidence.id)
+        owned = self._finish_claim(
+            evidence,
+            run_number,
+            {
+                "processing_status": "completed" if restore else "failed",
+                "processing_completed_at": now,
+                "processing_error": None if restore else error_message,
+                "processing_error_code": None if restore else error_code,
+            },
+        )
+        if not owned:
+            self._db.commit()  # the UPDATE matched nothing; just end the transaction
+            return None
         extraction = Extraction(
             evidence_id=evidence.id,
             case_id=evidence.case_id,
@@ -202,10 +366,6 @@ class ProcessingRepository:
             started_at=started_at,
         )
         self._db.add(extraction)
-        evidence.processing_status = "failed"
-        evidence.processing_completed_at = now
-        evidence.processing_error = error_message
-        evidence.processing_error_code = error_code
         self._db.commit()
         return extraction
 

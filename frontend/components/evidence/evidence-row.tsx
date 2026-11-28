@@ -17,7 +17,11 @@ import type { Evidence } from "@/lib/types/evidence";
 import type { ProcessingItem } from "@/lib/types/processing";
 import { ExtractionViewer } from "@/components/evidence/extraction-viewer";
 import { FileTypeIcon } from "@/components/evidence/file-type-icon";
-import { errorCodeLabel, outcomeLabel } from "@/components/evidence/processing-labels";
+import {
+  awaitingWorker,
+  errorCodeLabel,
+  outcomeLabel,
+} from "@/components/evidence/processing-labels";
 import { ProcessingStatusBadge } from "@/components/evidence/processing-status-badge";
 
 interface Props {
@@ -71,10 +75,16 @@ export function EvidenceRow({
   const attempts = item?.attempts ?? e.processing_attempts;
   const errorCode = item?.error_code ?? e.processing_error_code;
   const busy = status === "processing" || queued || actionBusy;
+  // This server leaves the file type to the separate processing worker.
+  const external = item?.external_worker === true;
+  const waitingForWorker = awaitingWorker(status, external, errorCode);
 
-  const canProcess = status === "pending" && extractorAvailable === true && !busy;
-  const canRetry = status === "failed" && !busy;
-  const canReprocess = status === "completed" && extractorAvailable !== false && !busy;
+  // Process/retry/re-process would only be refused for external file types, so the
+  // buttons are not offered; the worker handles those items.
+  const canProcess = status === "pending" && extractorAvailable === true && !external && !busy;
+  const canRetry = status === "failed" && !external && !busy;
+  const canReprocess =
+    status === "completed" && extractorAvailable !== false && !external && !busy;
   const canView = hasCurrent || attempts > 0;
 
   return (
@@ -92,6 +102,7 @@ export function EvidenceRow({
                 outcome={outcome}
                 queued={queued}
                 extractorAvailable={extractorAvailable}
+                awaitingWorker={waitingForWorker}
               />
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
@@ -170,7 +181,18 @@ export function EvidenceRow({
         </div>
       </div>
 
-      {status === "failed" && (
+      {waitingForWorker && (
+        <div role="status" className="mt-2 rounded-md border border-navy-700 bg-navy-900 px-3 py-2">
+          <p className="text-xs font-medium text-unresolved">Waiting for the processing worker</p>
+          <p className="mt-0.5 text-xs text-slate-400">
+            This file type (OCR, speech or video) is processed by a separate processing worker,
+            not by this server. It is picked up automatically; refresh the page to see the
+            result.
+          </p>
+        </div>
+      )}
+
+      {status === "failed" && !waitingForWorker && (
         <div role="alert" className="mt-2 rounded-md border border-failed/30 bg-failed/10 px-3 py-2">
           <p className="text-xs font-medium text-failed">
             Processing failed
