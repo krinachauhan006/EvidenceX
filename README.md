@@ -385,25 +385,44 @@ For more details, see [Security & Privacy](docs/SECURITY.md).
 
 ## Licence
 
-EvidenceX is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+EvidenceX is licensed under the *GNU Affero General Public License, version 3*
+(AGPL-3.0). The full text is in [LICENSE](LICENSE).
 
-You may use, study, modify, and redistribute the software under the terms and conditions of this licence.
 
-Under the AGPL-3.0, if you modify EvidenceX and make that modified version available for users to interact with over a network, you must also provide those users access to the corresponding source code under the applicable licence terms.
+EvidenceX — multimodal evidence intelligence and investigation workspace
+Copyright (C) 2026 Krina R. Chauhan
 
-The licence applies to EvidenceX's own code. Third-party libraries, tools, and assets remain subject to their respective licences.
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU Affero General Public License, version 3, as published by the Free
+Software Foundation.
 
-See the [`LICENSE`](LICENSE) file for the complete licence text and [`docs/THIRD_PARTY_LICENSES.md`](docs/THIRD_PARTY_LICENSES.md) for third-party notices.
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
 
-**Copyright (C) 2026 Krina R. Chauhan**
+You should have received a copy of the GNU Affero General Public License along with
+this program. If not, see <https://www.gnu.org/licenses/>.
 
----
 
-<p align="center">
-  <strong>EvidenceX</strong><br/>
-  One Case. Multiple Evidence Formats. Connected Findings.
-</p>
+Because of the AGPL, anyone who runs a *modified* EvidenceX for other people over a
+network must offer those users the source code of that modified version. The footer of
+the landing page and of every signed-in page links to the source code and this licence.
+If you deploy a fork, change
+frontend/lib/project.ts and backend/app/modules/analysis/pdf_notice.py to point at
+your fork.
 
-<p align="center">
-  Built with care for more transparent, traceable, and human-reviewed investigations.
-</p>
+The AGPL covers EvidenceX's own code. Third-party libraries, tools and images keep their
+own licences, which the AGPL does not replace. See
+[Third-party licences](docs/THIRD_PARTY_LICENSES.md). In particular:
+- PDF extraction and the PDF reports use PyMuPDF (© Artifex Software, Inc.), used here
+  under the AGPL-3.0. Generated PDFs keep PyMuPDF's producer and copyright notice in
+  their metadata. PDF_EXTRACTION_ENABLED=false turns off PDF extraction only; reports
+  still use PyMuPDF.
+- PyAV (audio and video) ships GPL-licensed codec libraries (libx264, libx265) in its
+  wheel. This matters if you publish Docker images; see "Needs legal review" in
+  [Third-party licences](docs/THIRD_PARTY_LICENSES.md).
+- The landing page ships one image, the owner-generated wall artwork. Six photographs
+  with unverified rights were removed and replaced by CSS artwork. See
+  [frontend/LANDING_IMAGES.md](frontend/LANDING_IMAGES.md).
+
+The copyright holder named above is a placeholder that must be confirmed before release.
